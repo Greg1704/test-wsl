@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  email              String         @unique
+  name               String?
+  emailVerified      Boolean        @default(false)
+  image              String?
+  defaultCurrency    String         @default("ARS")
+  monthlyIncomeCents BigInt         @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  sessions   Session[]
+  accounts   Account[]
+  cards      Card[]
+  purchases  Purchase[]
+  categories Category[]
+  rates      ExchangeRate[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Card {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  brand      String?
+  last4      String?
+  closingDay Int
+  dueDay     Int
+  currency   String    @default("ARS")
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([userId])
+}
+
+model Purchase {
+  id                      String   @id @default(cuid())
+  userId                  String
+  cardId                  String
+  categoryId              String?
+  description             String
+  merchant                String?
+  totalAmountCents        BigInt
+  currency                String   @default("ARS")
+  totalInstallments       Int
+  purchaseDate            DateTime @db.Date
+  firstInstallmentDueDate DateTime @db.Date
+  interestRateMonthly     Decimal? @db.Decimal(8, 4)
+  notes                   String?
+  createdAt               DateTime @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card         Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installments Installment[]
+
+  @@index([userId])
+  @@index([cardId])
+}
+
+model Installment {
+  id                String            @id @default(cuid())
+  purchaseId        String
+  installmentNumber Int
+  dueDate           DateTime          @db.Date
+  amountCents       BigInt
+  currency          String            @default("ARS")
+  status            InstallmentStatus @default(PENDING)
+  paidAt            DateTime?
+  createdAt         DateTime          @default(now())
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([dueDate])
+}
+
+enum InstallmentStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  userId    String
+  name      String
+  color     String?
+  icon      String?
+  createdAt DateTime  @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([userId])
+}
+
+model ExchangeRate {
+  id           String   @id @default(cuid())
+  userId       String
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(18, 6)
+  validFrom    DateTime @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
