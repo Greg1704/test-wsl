@@ -88,3 +88,4 @@ docker compose up -d postgres          # levantar la base local
 
 - `docs/SETUP.md` — cómo levantar el proyecto desde cero.
 - `docs/ARCHITECTURE.md` — modelo de datos, esquema Prisma, deployment.
+- `docs/REQUIREMENTS.md` — requerimientos funcionales y no funcionales
