@@ -27,7 +27,7 @@ Es un **proyecto de portfolio** para saltar de un rol de QA a uno full stack. Po
 
 ## Reglas de oro (leer SIEMPRE)
 
-@.claude/rules/arquitectura.md
+@personal-finance-app/docs/ARCHITECTURE.md
 @.claude/rules/dinero-y-fechas.md
 @.claude/rules/datos-y-prisma.md
 @.claude/rules/seguridad.md
@@ -45,13 +45,24 @@ Es un **proyecto de portfolio** para saltar de un rol de QA a uno full stack. Po
 
 ```ts
 // src/server/db/index.ts
-import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@/generated/prisma/client";
+
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({ log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"] });
+
+function createClient() {
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  return new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+  });
+}
+
+export const prisma = globalForPrisma.prisma ?? createClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 ```
+
+> Prisma 7 eliminó el motor Rust: el cliente se conecta vía driver adapter (`@prisma/adapter-pg`) y se genera en `src/generated/prisma` (no en `node_modules`).
 
 Nunca instancies `new PrismaClient()` en otro archivo: agota el pool de conexiones.
 

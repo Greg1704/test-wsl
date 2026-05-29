@@ -31,6 +31,7 @@ model User {
   email              String         @unique
   name               String?
   emailVerified      Boolean        @default(false)
+  image              String?                      // lo agrega el CLI de Better Auth
   defaultCurrency    String         @default("ARS")
   monthlyIncomeCents BigInt         @default(0)   // ingreso mensual en centavos
   createdAt          DateTime       @default(now())
@@ -170,6 +171,25 @@ function generateInstallments(input) {
 ```
 
 La compra y sus cuotas se insertan en una transacción (ver `.claude/rules/datos-y-prisma.md`).
+
+## Cálculo de cuotas con interés (RF-3.5)
+
+`Purchase.interestRateMonthly` es la **tasa mensual** del financiamiento (en %, ej. `5.5` = 5,5 % mensual). En Argentina la práctica más común en compras con tarjeta es informar un **monto recargado** que se paga en **N cuotas iguales**, así que ese es el modelo que usamos.
+
+**Sistema elegido: monto recargado en N cuotas iguales, con interés compuesto mensual.**
+
+```
+i = interestRateMonthly / 100            // tasa mensual como fracción
+totalRecargadoCents = round( totalAmountCents * (1 + i)^N )
+```
+
+- El factor `(1 + i)^N` se calcula en punto flotante (las tasas son fraccionarias por naturaleza) y el resultado se **redondea al centavo más cercano** una sola vez, obteniendo `totalRecargadoCents` como `BigInt`. A partir de ahí **toda la aritmética es entera** (BigInt), igual que sin interés.
+- El reparto en N cuotas iguales reutiliza la regla de redondeo ya existente: `base = totalRecargado / N` (división entera) y la **última cuota absorbe el resto**, de modo que la suma de las cuotas es **exactamente** `totalRecargadoCents` (al centavo).
+- **`interestRateMonthly` `null` o `0` ⇒ sin recargo:** `totalRecargado = totalAmountCents`, idéntico al comportamiento histórico (no se aplica ningún factor).
+
+Ejemplo: $100,00 (`10000`) en 3 cuotas al 5 % mensual → factor `1,05³ = 1,157625` → recargado `11576` → cuotas `3858 + 3858 + 3860 = 11576`. ✔
+
+> No usamos sistema francés (cuota fija por amortización con intereses decrecientes): para el mercado AR de retail es menos representativo y más difícil de explicar/testear. Si en el futuro se modela un préstamo bancario real, se evaluará agregarlo como una estrategia aparte.
 
 ## Deployment
 

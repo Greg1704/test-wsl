@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/server/db";
+import { createDefaultCategoriesFor } from "@/server/lib/categories";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -18,6 +19,16 @@ export const auth = betterAuth({
       monthlyIncomeCents: {
         type: "number",
         defaultValue: 0,
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        // Tras un signup exitoso, sembramos las categorías por defecto (RF-7.2).
+        after: async (user) => {
+          await createDefaultCategoriesFor(prisma, user.id);
+        },
       },
     },
   },

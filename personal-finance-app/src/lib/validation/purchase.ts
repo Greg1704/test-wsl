@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const purchaseSchema = z.object({
-  cardId: z.string().cuid(),
-  categoryId: z.string().cuid().optional(),
+  cardId: z.cuid(),
+  categoryId: z.cuid().optional(),
   description: z.string().min(1, "La descripción es requerida").max(200),
   merchant: z.string().max(100).optional(),
   totalAmount: z.number().positive("El monto debe ser mayor a 0"),

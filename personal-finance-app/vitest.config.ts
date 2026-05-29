@@ -8,6 +8,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     globals: true,
+    // Vitest = unit/component (*.test.ts). Los E2E (*.spec.ts en e2e/) los corre Playwright.
+    include: ["src/**/*.test.{ts,tsx}"],
   },
   resolve: {
     alias: {
