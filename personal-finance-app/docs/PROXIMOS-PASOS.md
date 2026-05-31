@@ -1,0 +1,131 @@
+# Próximos pasos — continuación de sesión
+
+Estado al cerrar la sesión del **2026-05-31**. Sirve para retomar el trabajo
+sin tener que reconstruir el contexto.
+
+## Qué se hizo
+
+### Sesión 2026-05-29
+Se implementó **completo** el `docs/SETUP_HANDOFF.md` (bloques A–F) en el commit
+**`dd7f742`** (`feat: implementar el setup handoff…`). Resumen:
+
+- **A** — Form de shadcn, `ThemeProvider` + `Toaster` + metadata es-AR, helpers
+  de sesión (`src/server/auth/session.ts`), rutas `(auth)/login` y `(auth)/signup`,
+  `src/middleware.ts` (guarda de `/dashboard`) y dashboard placeholder. Se eliminó
+  el boilerplate de create-next-app.
+- **B** — interés compuesto sobre monto recargado en `generateInstallments`
+  (decisión documentada en `ARCHITECTURE.md` → "Cálculo de cuotas con interés");
+  categorías por defecto vía hook post-signup de Better Auth (`src/server/lib/categories.ts`)
+  + `prisma/seed.ts` de backfill.
+- **C** — tests unit de `money`/`dates`, test de autorización cross-user
+  (`src/server/actions/__tests__/authorization.test.ts`) sobre las nuevas server
+  actions de Card/Purchase, y Playwright + happy path de auth (flujo de compra en
+  `test.skip` hasta tener UI).
+- **D/E/F** — `.env.example` + `output: "standalone"`, singleton de Prisma y
+  `User.image` alineados en los docs, migración a `z.cuid()`.
+- **Extra** — se consolidaron reglas/skills en `.claude` (estaban en un dir con
+  espacio inicial y los `@imports` de `CLAUDE.md` no resolvían); se arregló el
+  script de lint (`next lint` → `eslint .`, removido en Next 16); se agregó `tsx`
+  para correr el seed.
+
+**Verde:** `npm run typecheck`, `npm test` (35 tests / 5 archivos), `npm run lint`,
+`npm run build` (standalone).
+
+### Sesión 2026-05-31
+Se configuró el entorno de desarrollo con Docker completo:
+
+- **Docker:** se agregó el servicio `app` al `docker-compose.yml` (antes solo tenía
+  `postgres`). Incluye healthcheck en Postgres, migraciones automáticas al arrancar
+  y volúmenes para hot reload.
+- **`Dockerfile.dev`** — imagen de desarrollo de Next.js (instala deps, monta el
+  código como volumen para hot reload).
+- **ahoy** — instalado en el sistema (`v2.5.0`). `.ahoy.yml` con comandos rápidos
+  para Docker, Prisma y tests. Ver sección de comandos abajo.
+
+**NO verificado todavía** (pendiente de sesión anterior): la app en el browser y el E2E.
+
+## Comandos del entorno (actualizado)
+
+```bash
+# Levantar todo (postgres + app, migraciones automáticas)
+ahoy up
+
+# Ver que está corriendo
+ahoy ps
+
+# Seguir los logs de la app una vez levantada
+ahoy logs-app
+
+# Bajar todo
+ahoy down
+
+# Reconstruir imagen (solo necesario si cambia package.json)
+ahoy build
+```
+
+Los comandos de Prisma y tests se pueden correr **desde la terminal WSL directamente**
+(más cómodo) o vía ahoy desde el contenedor:
+
+```bash
+# Desde WSL (recomendado para dev)
+npx prisma migrate dev --name <desc>
+npx prisma studio
+npm test
+npm run typecheck
+
+# Equivalente vía ahoy (desde el contenedor)
+ahoy migrate
+ahoy studio
+ahoy test
+ahoy typecheck
+```
+
+## Pendientes (en orden)
+
+### 1. Verificar contra una DB real
+```bash
+ahoy up               # levanta postgres + app (migraciones corren solas)
+ahoy logs-app         # confirmar que Next.js arrancó en :3000
+```
+- Probar a mano en el browser: signup → dashboard → logout → login.
+- Confirmar validación de forms, toast de error y modo oscuro.
+- Confirmar el **hook de categorías**: registrar un usuario y verificar en
+  `npx prisma studio` que se crean las 8 categorías por defecto.
+
+### 2. Dejar verde el E2E
+```bash
+# Crear la DB de test (desde WSL, una sola vez)
+createdb -h localhost -U app cuotas_test
+# Aplicar migraciones a esa DB
+DATABASE_URL="postgresql://app:dev@localhost:5432/cuotas_test?schema=public" npx prisma migrate deploy
+# Instalar browsers de Playwright (una sola vez)
+npx playwright install
+npm run test:e2e
+```
+La parte de auth debería pasar; el flujo de compra sigue en `test.skip`.
+
+### 3. Decisiones chicas
+- **`middleware.ts` → `proxy.ts`**: Next 16 deprecó el convention `middleware`
+  (warning en cada build). Funciona igual. Decidir si migrar.
+- **`.env` local**: agregar `NEXT_PUBLIC_APP_URL` (hoy anda por el fallback) y
+  regenerar `BETTER_AUTH_SECRET` para entornos no-dev.
+
+### 4. Fase de diseño visual (objetivo principal)
+Con el shell/auth/sesión/rutas listos, construir las pantallas reales:
+- CRUD de tarjetas.
+- Form de compra + **simulador** ("si compro esto en N cuotas…").
+- Calendario consolidado **multi-tarjeta** de cuotas.
+- Métrica de **"ingreso disponible neto de cuotas"** mes a mes.
+
+Las server actions de Card/Purchase (`src/server/actions/`) ya están listas para
+enganchar. A medida que existan las pantallas, sacar el `test.skip` del happy path.
+
+### 5. Dockerfile de producción (multi-stage)
+`Dockerfile.dev` ya existe para desarrollo. Falta el Dockerfile multi-stage de
+producción con `output: "standalone"` para el deploy al VPS. Ver criterios en
+`docs/ARCHITECTURE.md` → "Dockerfile (puntos críticos de Prisma)".
+
+### Opcionales / cosmético
+- Borrar los `public/*.svg` sin usar.
+- Arreglar el symlink colgante `personal-finance-app/AGENTS.md` (apunta a un
+  `CLAUDE.md` que no existe en este subdirectorio).

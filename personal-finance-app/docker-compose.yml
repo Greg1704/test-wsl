@@ -7,6 +7,50 @@ services:
       POSTGRES_PASSWORD: dev
     ports: ["5432:5432"]
     volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d cuotas"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app                  # monta el código fuente → hot reload
+      - /app/node_modules       # volumen anónimo: preserva los node_modules del contenedor
+      - /app/.next              # volumen anónimo: preserva el cache de build
+    environment:
+      DATABASE_URL: "postgresql://app:dev@postgres:5432/cuotas?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+      BETTER_AUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.60.0-noble
+    working_dir: /e2e
+    volumes:
+      - .:/e2e
+      - e2e_node_modules:/e2e/node_modules  # node_modules separados (Ubuntu vs Alpine)
+    environment:
+      PLAYWRIGHT_BASE_URL: "http://app:3000"
+      DATABASE_URL_TEST: "postgresql://app:dev@postgres:5432/cuotas_test?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+    depends_on:
+      app:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    command: bash -c "npm ci --silent && npx playwright test"
+    profiles: ["e2e"]  # no arranca con "ahoy up", solo con "ahoy test-e2e"
 
 volumes:
   postgres_data:
+  e2e_node_modules:

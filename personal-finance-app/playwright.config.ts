@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3000;
-const baseURL = `http://localhost:${PORT}`;
+// En Docker, PLAYWRIGHT_BASE_URL apunta al servicio "app" de docker-compose.
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",

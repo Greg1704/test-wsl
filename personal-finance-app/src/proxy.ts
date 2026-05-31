@@ -3,7 +3,7 @@ import { getSessionCookie } from "better-auth/cookies";
 
 // Guarda optimista a nivel edge: si no hay cookie de sesión, redirige a /login.
 // La verificación real de la sesión ocurre en cada Server Component/Action.
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const sessionCookie = getSessionCookie(request);
 
   if (!sessionCookie) {

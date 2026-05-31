@@ -1,0 +1,62 @@
+ahoyapi: v2
+commands:
+
+  # ── Contenedores ──────────────────────────────────────────────
+  up:
+    usage: Levanta los contenedores en segundo plano
+    cmd: docker compose up -d
+
+  build:
+    usage: Reconstruye la imagen de la app y levanta (usar tras cambiar package.json)
+    cmd: docker compose up -d --build
+
+  down:
+    usage: Baja y elimina los contenedores
+    cmd: docker compose down
+
+  restart:
+    usage: Reinicia todos los contenedores
+    cmd: docker compose restart
+
+  ps:
+    usage: Estado de los contenedores
+    cmd: docker compose ps
+
+  # ── Logs ──────────────────────────────────────────────────────
+  logs:
+    usage: Sigue los logs de todos los contenedores
+    cmd: docker compose logs -f
+
+  logs-app:
+    usage: Sigue los logs de la app Next.js
+    cmd: docker compose logs -f app
+
+  logs-db:
+    usage: Sigue los logs de Postgres
+    cmd: docker compose logs -f postgres
+
+  # ── Base de datos ─────────────────────────────────────────────
+  migrate:
+    usage: "Crea y aplica una nueva migración (ej: ahoy migrate --name nombre)"
+    cmd: docker compose exec app npx prisma migrate dev
+
+  studio:
+    usage: Abre Prisma Studio en el browser (localhost:5555)
+    cmd: docker compose exec app npx prisma studio
+
+  # ── App ───────────────────────────────────────────────────────
+  shell:
+    usage: Abre una shell dentro del contenedor de la app
+    cmd: docker compose exec app sh
+
+  test:
+    usage: Corre los tests unitarios
+    cmd: docker compose exec app npm test
+
+  test-e2e:
+    usage: Corre los tests E2E con Playwright (usa imagen Docker oficial)
+    cmd: docker compose run --rm e2e
+
+  typecheck:
+    usage: Verifica los tipos de TypeScript
+    cmd: docker compose exec app npm run typecheck

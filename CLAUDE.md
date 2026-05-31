@@ -3,6 +3,10 @@
 Instrucciones persistentes para Claude Code en este repositorio. Se cargan al inicio de cada sesión.
 Mantené este archivo conciso: lo que Claude puede inferir del código no hace falta repetirlo acá.
 
+## Contexto del autor
+
+El autor viene de QA y este es su **primer proyecto en Next.js/React**. Al explicar conceptos del stack (App Router, Server Components, Server Actions, layouts, shadcn/ui), incluí una línea de contexto del "por qué" antes del "cómo". No asumas familiaridad con las convenciones de Next.js, pero tampoco sobreexpliques — es una persona técnica con buen criterio.
+
 ## Qué es este proyecto
 
 **CuotApp** es una app de finanzas personales para el mercado argentino, centrada en el manejo de **compras en cuotas** con tarjeta de crédito. El caso de uso central que NINGÚN competidor cubre bien:

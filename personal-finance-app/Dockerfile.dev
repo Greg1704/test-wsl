@@ -1,0 +1,10 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Instalar dependencias primero (capa cacheada — solo se reconstruye si cambia package.json)
+COPY package*.json ./
+COPY prisma/ ./prisma/
+RUN npm ci
+
+EXPOSE 3000
