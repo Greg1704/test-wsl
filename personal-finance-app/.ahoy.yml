@@ -40,6 +40,10 @@ commands:
     usage: "Crea y aplica una nueva migración (ej: ahoy migrate --name nombre)"
     cmd: docker compose exec app npx prisma migrate dev
 
+  generate:
+    usage: "Regenera el cliente Prisma dentro del contenedor (tras cambiar el schema)"
+    cmd: docker compose exec app npx prisma generate && docker compose restart app
+
   studio:
     usage: Abre Prisma Studio en el browser (localhost:5555)
     cmd: docker compose exec app npx prisma studio

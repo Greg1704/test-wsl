@@ -72,12 +72,15 @@ model Verification {
 
 model Card {
   id         String    @id @default(cuid())
-  userId     String
-  name       String
-  brand      String?
-  last4      String?
-  closingDay Int
-  dueDay     Int
+  userId         String
+  name           String    // nombre identificatorio de la tarjeta ("Tarjeta principal")
+  owner          String?   // dueño de la tarjeta (para tarjetas ajenas que se deben pagar)
+  bank           String    // banco emisor ("Galicia", "Santander"… o nombre libre)
+  brand          String?
+  last4          String    // últimos 4 dígitos (obligatorio)
+  expirationDate DateTime  @db.Date  // vencimiento de la tarjeta (fin del mes MM/AA)
+  closingDay     Int
+  dueDay         Int
   currency   String    @default("ARS")
   isActive   Boolean   @default(true)
   createdAt  DateTime  @default(now())

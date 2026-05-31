@@ -16,5 +16,11 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*"],
+  // Rutas del grupo (dashboard). Agregar acá cada nueva sección protegida.
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/tarjetas",
+    "/tarjetas/:path*",
+  ],
 };

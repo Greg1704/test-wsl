@@ -1,4 +1,5 @@
 import { addMonths, setDate, getDate } from "date-fns";
+import { nextBusinessDay } from "./dates";
 
 interface GenerateInstallmentsInput {
   cardClosingDay: number;
@@ -65,7 +66,8 @@ export function generateInstallments(input: GenerateInstallmentsInput): Installm
   return Array.from({ length: totalInstallments }, (_, i) => ({
     installmentNumber: i + 1,
     amountCents: i === totalInstallments - 1 ? baseCents + remainder : baseCents,
-    dueDate: setDate(addMonths(firstStatementMonth, i), cardDueDay),
+    // Si el vencimiento cae fin de semana, se corre al lunes siguiente.
+    dueDate: nextBusinessDay(setDate(addMonths(firstStatementMonth, i), cardDueDay)),
     currency,
     status: "PENDING" as const,
   }));

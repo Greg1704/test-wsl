@@ -36,6 +36,7 @@ Es un **proyecto de portfolio** para saltar de un rol de QA a uno full stack. Po
 @.claude/rules/datos-y-prisma.md
 @.claude/rules/seguridad.md
 @.claude/rules/testing.md
+@.claude/rules/ui.md
 
 ## Convenciones rápidas
 
@@ -101,6 +102,7 @@ docker compose up -d postgres          # levantar la base local
 
 ## Documentación de referencia
 
+- `docs/ROADMAP.md` — **fuente de verdad de fases y alcance** (MVP = Fases 1-4, visión a futuro).
 - `docs/SETUP.md` — cómo levantar el proyecto desde cero.
 - `docs/ARCHITECTURE.md` — modelo de datos, esquema Prisma, deployment.
 - `docs/REQUIREMENTS.md` — requerimientos funcionales y no funcionales

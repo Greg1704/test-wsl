@@ -60,7 +60,10 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
+  // "popper" (en vez de "item-aligned"): el menú se ancla debajo del trigger con
+  // altura acotada y scroll, en vez de crecer hacia arriba ocupando la pantalla.
+  // Aplica a TODOS los selects que usan este componente. Ver .claude/rules/ui.md.
+  position = "popper",
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {

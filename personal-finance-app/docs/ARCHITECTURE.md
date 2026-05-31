@@ -164,13 +164,27 @@ function generateInstallments(input) {
   return Array.from({ length: totalInstallments }, (_, i) => ({
     installmentNumber: i + 1,
     amountCents: i === totalInstallments - 1 ? baseCents + remainder : baseCents,
-    dueDate: setDate(addMonths(firstStatementMonth, i), cardDueDay),
+    // nextBusinessDay corre el vencimiento al lunes si cae fin de semana.
+    dueDate: nextBusinessDay(setDate(addMonths(firstStatementMonth, i), cardDueDay)),
     status: "PENDING" as const,
   }));
 }
 ```
 
 La compra y sus cuotas se insertan en una transacción (ver `.claude/rules/datos-y-prisma.md`).
+
+### Ajuste de día hábil (fin de semana)
+
+Si el vencimiento de una cuota cae **sábado o domingo**, se corre al **lunes
+siguiente** (`nextBusinessDay` en `src/server/lib/dates.ts`). Es la convención más
+común de los bancos para la fecha de pago.
+
+Los **feriados NO se contemplan** a propósito: en Argentina son impredecibles por
+código (los "puente" turísticos se declaran por decreto cada año, sin fórmula fija)
+y CuotApp es una **proyección de flujo de caja**, no el sistema de facturación del
+banco. Las fechas son una estimación con precisión de ±1-2 días hábiles. Como las
+fechas de cierre/vencimiento se usan siempre en la primera quincena del mes, tampoco
+hay riesgo de desborde de día (29/30/31 en meses cortos).
 
 ## Cálculo de cuotas con interés (RF-3.5)
 

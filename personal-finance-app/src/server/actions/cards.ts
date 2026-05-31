@@ -2,21 +2,64 @@
 
 import { revalidatePath } from "next/cache";
 
+import type { Card } from "@/generated/prisma/client";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
 import { cardSchema } from "@/lib/validation/card";
+import { parseExpiration, startOfToday } from "@/server/lib/dates";
 
-export async function createCard(input: unknown) {
+/** Tarjetas vigentes: activas y sin vencer. */
+export async function listActiveCards() {
   const user = await requireUser();
-  const data = cardSchema.parse(input);
+  return prisma.card.findMany({
+    where: { userId: user.id, isActive: true, expirationDate: { gte: startOfToday() } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/** Tarjetas vencidas: siguen activas pero su fecha de vencimiento ya pasó. */
+export async function listExpiredCards() {
+  const user = await requireUser();
+  return prisma.card.findMany({
+    where: { userId: user.id, isActive: true, expirationDate: { lt: startOfToday() } },
+    orderBy: { expirationDate: "desc" },
+  });
+}
+
+/** Tarjetas desactivadas a mano (soft delete). */
+export async function listDeactivatedCards() {
+  const user = await requireUser();
+  return prisma.card.findMany({
+    where: { userId: user.id, isActive: false },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export type CreateCardResult =
+  | { status: "created"; card: Card }
+  | { status: "duplicate"; existing: Card };
+
+export async function createCard(input: unknown, force = false): Promise<CreateCardResult> {
+  const user = await requireUser();
+  const { expiration, ...data } = cardSchema.parse(input);
+
+  if (!force) {
+    // Duplicado = mismo banco + últimos 4 (entre activas, vencidas y desactivadas).
+    const existing = await prisma.card.findFirst({
+      where: { userId: user.id, bank: data.bank, last4: data.last4 },
+    });
+    if (existing) {
+      return { status: "duplicate", existing };
+    }
+  }
 
   const card = await prisma.card.create({
     // El userId SIEMPRE viene de la sesión, nunca del input del cliente.
-    data: { ...data, userId: user.id },
+    data: { ...data, expirationDate: parseExpiration(expiration), userId: user.id },
   });
 
-  revalidatePath("/dashboard");
-  return card;
+  revalidatePath("/tarjetas");
+  return { status: "created", card };
 }
 
 export async function getCardById(id: string) {
@@ -32,16 +75,55 @@ export async function getCardById(id: string) {
   return card;
 }
 
-export async function deleteCard(id: string) {
+export async function updateCard(id: string, input: unknown) {
   const user = await requireUser();
+  const { expiration, ...data } = cardSchema.parse(input);
 
-  const { count } = await prisma.card.deleteMany({
+  // updateMany filtra por userId: el usuario A no puede editar la tarjeta de B.
+  const { count } = await prisma.card.updateMany({
     where: { id, userId: user.id },
+    data: { ...data, expirationDate: parseExpiration(expiration) },
   });
 
   if (count === 0) {
     throw new Error("Tarjeta no encontrada");
   }
 
-  revalidatePath("/dashboard");
+  revalidatePath("/tarjetas");
+}
+
+/**
+ * Soft delete: marca la tarjeta como inactiva en vez de borrarla.
+ * Preserva el historial de compras/cuotas (el schema tiene onDelete: Cascade,
+ * así que un borrado real arrastraría todas las compras de la tarjeta).
+ */
+export async function deactivateCard(id: string) {
+  const user = await requireUser();
+
+  const { count } = await prisma.card.updateMany({
+    where: { id, userId: user.id },
+    data: { isActive: false },
+  });
+
+  if (count === 0) {
+    throw new Error("Tarjeta no encontrada");
+  }
+
+  revalidatePath("/tarjetas");
+}
+
+/** Reactiva una tarjeta desactivada a mano. */
+export async function reactivateCard(id: string) {
+  const user = await requireUser();
+
+  const { count } = await prisma.card.updateMany({
+    where: { id, userId: user.id },
+    data: { isActive: true },
+  });
+
+  if (count === 0) {
+    throw new Error("Tarjeta no encontrada");
+  }
+
+  revalidatePath("/tarjetas");
 }

@@ -68,6 +68,20 @@ describe("generateInstallments", () => {
     expect(result[0].dueDate.getDate()).toBe(10);
   });
 
+  it("si el vencimiento cae fin de semana, se corre al lunes", () => {
+    // Cierre 20, compra 15/ene → primer vencimiento en febrero.
+    // Día 8 de feb/2025 es sábado → debe moverse al lunes 10.
+    const result = generateInstallments({
+      ...base,
+      cardDueDay: 8,
+      purchaseDate: new Date("2025-01-15"),
+      totalInstallments: 1,
+      totalAmountCents: 1000n,
+    });
+    expect(result[0].dueDate.getMonth()).toBe(1); // febrero
+    expect(result[0].dueDate.getDate()).toBe(10); // corrido de sáb 8 a lun 10
+  });
+
   it("todas las cuotas tienen status PENDING", () => {
     const result = generateInstallments({
       ...base,

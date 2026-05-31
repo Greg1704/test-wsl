@@ -4,7 +4,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/server/auth/session", () => ({ requireUser: vi.fn() }));
 vi.mock("@/server/db", () => ({
   prisma: {
-    card: { create: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn() },
+    card: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
     purchase: { create: vi.fn(), findFirst: vi.fn() },
     installment: { createMany: vi.fn() },
     $transaction: vi.fn(),
@@ -13,7 +13,12 @@ vi.mock("@/server/db", () => ({
 
 import { requireUser } from "@/server/auth/session";
 import { prisma } from "@/server/db";
-import { createCard, getCardById, deleteCard } from "@/server/actions/cards";
+import {
+  createCard,
+  getCardById,
+  deactivateCard,
+  reactivateCard,
+} from "@/server/actions/cards";
 import { createPurchase, getPurchaseById } from "@/server/actions/purchases";
 
 const USER_A = "user-aaaaaaaaaaaaaaaaaaaaaa";
@@ -33,10 +38,14 @@ describe("autorización cross-user (RNF-1.1)", () => {
   describe("Card", () => {
     it("createCard escribe SIEMPRE el userId de la sesión, ignorando el del input", async () => {
       asUser(USER_B);
+      vi.mocked(prisma.card.findFirst).mockResolvedValue(null); // sin duplicado
       vi.mocked(prisma.card.create).mockResolvedValue({ id: "new" } as never);
 
       await createCard({
         name: "Visa Galicia",
+        bank: "Galicia",
+        last4: "1234",
+        expiration: "08/27",
         closingDay: 20,
         dueDay: 10,
         currency: "ARS",
@@ -49,6 +58,28 @@ describe("autorización cross-user (RNF-1.1)", () => {
       expect(arg.data.userId).toBe(USER_B);
     });
 
+    it("createCard detecta duplicado (banco + last4) y NO crea", async () => {
+      asUser(USER_B);
+      vi.mocked(prisma.card.create).mockClear();
+      vi.mocked(prisma.card.findFirst).mockResolvedValue({
+        id: "existing",
+        isActive: false,
+      } as never);
+
+      const result = await createCard({
+        name: "Visa Galicia",
+        bank: "Galicia",
+        last4: "1234",
+        expiration: "08/27",
+        closingDay: 20,
+        dueDay: 10,
+        currency: "ARS",
+      });
+
+      expect(result.status).toBe("duplicate");
+      expect(vi.mocked(prisma.card.create)).not.toHaveBeenCalled();
+    });
+
     it("getCardById de B no puede leer una tarjeta de A (query scopeada al userId de sesión)", async () => {
       asUser(USER_B);
       vi.mocked(prisma.card.findFirst).mockResolvedValue(null);
@@ -59,13 +90,25 @@ describe("autorización cross-user (RNF-1.1)", () => {
       });
     });
 
-    it("deleteCard de B no borra una tarjeta de A (count 0 → error)", async () => {
+    it("deactivateCard de B no desactiva una tarjeta de A (count 0 → error)", async () => {
       asUser(USER_B);
-      vi.mocked(prisma.card.deleteMany).mockResolvedValue({ count: 0 } as never);
+      vi.mocked(prisma.card.updateMany).mockResolvedValue({ count: 0 } as never);
 
-      await expect(deleteCard(CARD_OF_A)).rejects.toThrow("no encontrada");
-      expect(vi.mocked(prisma.card.deleteMany)).toHaveBeenCalledWith({
+      await expect(deactivateCard(CARD_OF_A)).rejects.toThrow("no encontrada");
+      expect(vi.mocked(prisma.card.updateMany)).toHaveBeenCalledWith({
         where: { id: CARD_OF_A, userId: USER_B },
+        data: { isActive: false },
+      });
+    });
+
+    it("reactivateCard de B no reactiva una tarjeta de A (count 0 → error)", async () => {
+      asUser(USER_B);
+      vi.mocked(prisma.card.updateMany).mockResolvedValue({ count: 0 } as never);
+
+      await expect(reactivateCard(CARD_OF_A)).rejects.toThrow("no encontrada");
+      expect(vi.mocked(prisma.card.updateMany)).toHaveBeenCalledWith({
+        where: { id: CARD_OF_A, userId: USER_B },
+        data: { isActive: true },
       });
     });
   });

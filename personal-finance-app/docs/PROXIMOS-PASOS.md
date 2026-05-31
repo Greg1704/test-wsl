@@ -105,25 +105,29 @@ npm run test:e2e
 La parte de auth debería pasar; el flujo de compra sigue en `test.skip`.
 
 ### 3. Decisiones chicas
-- **`middleware.ts` → `proxy.ts`**: Next 16 deprecó el convention `middleware`
-  (warning en cada build). Funciona igual. Decidir si migrar.
-- **`.env` local**: agregar `NEXT_PUBLIC_APP_URL` (hoy anda por el fallback) y
-  regenerar `BETTER_AUTH_SECRET` para entornos no-dev.
+- ✅ **`middleware.ts` → `proxy.ts`**: migrado con el codemod oficial de Next 16.
+- ✅ **`.env` local**: `NEXT_PUBLIC_APP_URL` y `DATABASE_URL_TEST` agregados.
+- Pendiente: regenerar `BETTER_AUTH_SECRET` para entornos no-dev (prod).
 
-### 4. Fase de diseño visual (objetivo principal)
-Con el shell/auth/sesión/rutas listos, construir las pantallas reales:
-- CRUD de tarjetas.
-- Form de compra + **simulador** ("si compro esto en N cuotas…").
-- Calendario consolidado **multi-tarjeta** de cuotas.
-- Métrica de **"ingreso disponible neto de cuotas"** mes a mes.
+### 4. Construir el MVP (Fases 2-4 del roadmap)
+> Roadmap canónico y frontera del MVP: `docs/ROADMAP.md`. **Estas son fases del
+> producto**, no "pendientes" sueltos — no renumerar acá.
+
+El shell/auth/rutas y la **Fase 1 (tarjetas)** ya están listos. Para cerrar el MVP:
+- **Fase 2 — Core de cuotas**: form de compra + generación de cuotas, gestión de
+  cuotas (marcar pagada/revertir), categorías.
+- **Fase 3 — Dashboard + calendario**: métrica de **"disponible neto de cuotas"** mes
+  a mes y calendario consolidado **multi-tarjeta** de vencimientos.
+- **Fase 4 — Simulador**: "si compro esto en N cuotas…" (cierra el MVP).
 
 Las server actions de Card/Purchase (`src/server/actions/`) ya están listas para
 enganchar. A medida que existan las pantallas, sacar el `test.skip` del happy path.
 
-### 5. Dockerfile de producción (multi-stage)
-`Dockerfile.dev` ya existe para desarrollo. Falta el Dockerfile multi-stage de
-producción con `output: "standalone"` para el deploy al VPS. Ver criterios en
-`docs/ARCHITECTURE.md` → "Dockerfile (puntos críticos de Prisma)".
+### 5. Entrega del MVP (Fases 5-6 del roadmap)
+- **Fase 5 — Testing + CI/CD**: dejar verde el E2E (ver pendiente 2) y montar el
+  pipeline de GitHub Actions.
+- **Fase 6 — Deploy**: el `Dockerfile` multi-stage de producción **ya existe**; falta
+  el pipeline y el deploy al VPS. Criterios en `docs/ARCHITECTURE.md`.
 
 ### Opcionales / cosmético
 - Borrar los `public/*.svg` sin usar.

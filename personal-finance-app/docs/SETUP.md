@@ -234,8 +234,9 @@ Si los cinco funcionan, el entorno está listo. El deploy (VPS + Docker Compose 
 2. **Fase 1** — Auth + layout + CRUD de tarjetas.
 3. **Fase 2** — Core de cuotas (`Purchase`, `Installment`, `generateInstallments`).
 4. **Fase 3** — Calendario + dashboard (ingreso neto de cuotas).
-5. **Fase 4** — Simulador + polish.
+5. **Fase 4** — Simulador (**cierre del MVP**).
 6. **Fase 5** — Testing + CI/CD.
 7. **Fase 6** — Deploy a VPS.
 
-El detalle completo de cada fase está en la guía técnica general del proyecto.
+El roadmap canónico, la frontera del MVP (Fases 1-4) y la visión a futuro están en
+`docs/ROADMAP.md`.

@@ -2,9 +2,11 @@
 
 Requerimientos funcionales y no funcionales del sistema. Sirve de referencia tanto para el desarrollo manual como para Claude Code al construir cada feature.
 
-Convención de alcance:
-- **(MVP)** → Fases 1-3 del roadmap (auth, tarjetas, compras, cuotas, dashboard, calendario).
-- **(Post-MVP)** → Fases 4+ (simulador, alertas, multi-moneda consolidada, etc.).
+Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
+- **(MVP)** → Fases 1-4 (auth, tarjetas, compras, cuotas, dashboard, calendario y **simulador**).
+- **(Post-MVP)** → alertas, multi-moneda consolidada, OAuth, etc.
+- La expansión de dominio a largo plazo (débito/efectivo, ingresos variables, préstamos,
+  cuentas/saldos) está en la sección "Visión a futuro" de `ROADMAP.md`.
 
 ---
 
@@ -71,7 +73,7 @@ Convención de alcance:
 - **RF-7.2** El sistema debe proveer un seed inicial de categorías comunes en español al crear la cuenta.
 - **RF-7.3** *(Post-MVP)* Gráfico de gastos por categoría.
 
-### RF-8. Simulador de compras (Post-MVP, Fase 4)
+### RF-8. Simulador de compras (MVP, Fase 4)
 
 - **RF-8.1** El usuario debe poder ingresar un monto, una cantidad de cuotas y una tarjeta hipotéticos, sin persistir nada.
 - **RF-8.2** El sistema debe mostrar el impacto mes a mes en el "disponible neto" futuro durante los meses afectados.
@@ -82,7 +84,7 @@ Convención de alcance:
 - **RF-9.1** *(MVP)* Cada tarjeta, compra y cuota debe llevar su moneda; el sistema nunca debe sumar montos de monedas distintas.
 - **RF-9.2** *(Post-MVP)* El usuario debe poder cargar tipos de cambio históricos (modelo `ExchangeRate`) para visualizar totales consolidados en una moneda "display".
 
-### RF-10. Alertas (Post-MVP, Fase 4)
+### RF-10. Alertas (Post-MVP)
 
 - **RF-10.1** El dashboard debe mostrar un banner si hay cuotas con vencimiento en los próximos 3 días.
 - **RF-10.2** *(Post-MVP futuro)* Notificaciones por email de vencimientos próximos.
@@ -166,12 +168,15 @@ Convención de alcance:
 
 ## Trazabilidad (requerimiento → fase del roadmap)
 
+Definición canónica de las fases en `docs/ROADMAP.md`. **MVP = Fases 1-4.**
+
 | Fase | Requerimientos cubiertos |
 |---|---|
-| Fase 1 — Auth + tarjetas | RF-1, RF-2 |
+| Fase 1 — Tarjetas | RF-1, RF-2 |
 | Fase 2 — Core de cuotas | RF-3, RF-4, RF-7 |
-| Fase 3 — Calendario + dashboard | RF-5, RF-6, RF-9.1 |
-| Fase 4 — Simulador + polish | RF-8, RF-10 |
+| Fase 3 — Dashboard + calendario | RF-5, RF-6, RF-9.1 |
+| Fase 4 — Simulador (cierre del MVP) | RF-8 |
+| Post-MVP | RF-1.7, RF-1.8, RF-4.5, RF-7.3, RF-9.2, RF-10 |
 | Fase 5 — Testing + CI/CD | RNF-5, RNF-6 |
 | Fase 6 — Deploy | RNF-4, RNF-10 |
 | Transversal (todas las fases) | RNF-1, RNF-2, RNF-3, RNF-7, RNF-8, RNF-9 |
