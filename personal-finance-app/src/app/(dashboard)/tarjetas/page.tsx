@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CardFormDialog } from "@/components/tarjetas/card-form-dialog";
 import { CardItem } from "@/components/tarjetas/card-item";
 import { DeactivatedCardsDialog } from "@/components/tarjetas/deactivated-cards-dialog";
+import { RenewCardDialog } from "@/components/tarjetas/renew-card-dialog";
 
 export default async function TarjetasPage() {
   // Server Component: lee la DB directo, sin fetch ni API intermedia.
@@ -80,8 +81,14 @@ export default async function TarjetasPage() {
                       {card.bank} · •••• {card.last4} · {formatExpiration(card.expirationDate)}
                     </span>
                     <div className="ml-auto">
-                      <CardFormDialog
-                        card={card}
+                      <RenewCardDialog
+                        card={{
+                          id: card.id,
+                          name: card.name,
+                          bank: card.bank,
+                          last4: card.last4,
+                          expirationDate: card.expirationDate,
+                        }}
                         trigger={
                           <Button variant="outline" size="sm">
                             Renovar

@@ -10,15 +10,15 @@
 
 ## Reparto de cuotas (redondeo)
 
-Al dividir un total en N cuotas, el resto se asigna a la **última** cuota para que la suma sea exacta:
+Al dividir un total en N cuotas, los centavos del resto se reparten de a **1 entre las primeras** cuotas (como los bancos), para que la suma sea exacta sin que la última cuota se despegue:
 
 ```
 base = total / N           (división entera BigInt)
-resto = total - base * N
-cuota[i] = (i === N-1) ? base + resto : base
+resto = total - base * N    (0..N-1 centavos)
+cuota[i] = (i < resto) ? base + 1 : base
 ```
 
-Ejemplo: $100,00 (10000) en 3 → 3333 + 3333 + 3334 = 10000. ✔
+Ejemplo: $100,00 (10000) en 3 → 3334 + 3333 + 3333 = 10000. ✔  ($200 en 12 → 8 cuotas de 1667 + 4 de 1666, diferencia de 1 centavo, no de 8.)
 
 ## Fechas
 

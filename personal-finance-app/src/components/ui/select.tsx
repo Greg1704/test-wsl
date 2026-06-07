@@ -65,6 +65,11 @@ function SelectContent({
   // Aplica a TODOS los selects que usan este componente. Ver .claude/rules/ui.md.
   position = "popper",
   align = "center",
+  // Forzamos apertura hacia ABAJO (side="bottom" + avoidCollisions=false): con
+  // listas largas (días 1-31, cuotas 1-60) Radix, por defecto, invertía el menú
+  // hacia arriba cuando faltaba espacio abajo, tapando las primeras opciones. La
+  // altura ya queda acotada con scroll por max-h-(--radix-select-content-available-height).
+  side = "bottom",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (
@@ -75,6 +80,8 @@ function SelectContent({
         className={cn("relative z-50 max-h-(--radix-select-content-available-height) min-w-36 origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", position ==="popper"&&"data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1", className )}
         position={position}
         align={align}
+        side={position === "popper" ? side : undefined}
+        avoidCollisions={position === "popper" ? false : undefined}
         {...props}
       >
         <SelectScrollUpButton />

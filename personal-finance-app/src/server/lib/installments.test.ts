@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateInstallments, surchargedTotalCents } from "./installments";
+import { generateInstallments, impliedMonthlyRate } from "./installments";
 
 describe("generateInstallments", () => {
   const base = {
@@ -31,17 +31,31 @@ describe("generateInstallments", () => {
     expect(total).toBe(100n);
   });
 
-  it("la última cuota absorbe el sobrante del redondeo", () => {
-    // 100 / 3 = 33 resto 1 → cuotas: 33, 33, 34
+  it("los centavos sobrantes se reparten en las primeras cuotas", () => {
+    // 100 / 3 = 33 resto 1 → el centavo sobrante va a la PRIMERA: 34, 33, 33
     const result = generateInstallments({
       ...base,
       purchaseDate: new Date("2025-01-15"),
       totalInstallments: 3,
       totalAmountCents: 100n,
     });
-    expect(result[0].amountCents).toBe(33n);
+    expect(result[0].amountCents).toBe(34n);
     expect(result[1].amountCents).toBe(33n);
-    expect(result[2].amountCents).toBe(34n);
+    expect(result[2].amountCents).toBe(33n);
+  });
+
+  it("$200 en 12 cuotas: sin outlier en la última (8 cuotas de 16,67 y 4 de 16,66)", () => {
+    // 20000 / 12 = 1666 resto 8 → las primeras 8 cuotas suman 1 centavo
+    const result = generateInstallments({
+      ...base,
+      purchaseDate: new Date("2025-01-15"),
+      totalInstallments: 12,
+      totalAmountCents: 20000n,
+    });
+    const amounts = result.map((r) => r.amountCents);
+    expect(amounts.filter((a) => a === 1667n)).toHaveLength(8);
+    expect(amounts.filter((a) => a === 1666n)).toHaveLength(4);
+    expect(amounts.reduce((acc, a) => acc + a, 0n)).toBe(20000n);
   });
 
   it("compra antes del cierre → primer vencimiento el mes siguiente", () => {
@@ -66,6 +80,31 @@ describe("generateInstallments", () => {
     });
     expect(result[0].dueDate.getMonth()).toBe(2); // marzo (0-indexed)
     expect(result[0].dueDate.getDate()).toBe(10);
+  });
+
+  it("vencimiento posterior al cierre, mismo mes (dueDay > closingDay): no se va de más", () => {
+    // Cierre 5, vencimiento 20 → el pago cae el mismo mes del cierre.
+    const antesDelCierre = generateInstallments({
+      cardClosingDay: 5,
+      cardDueDay: 20,
+      currency: "ARS",
+      purchaseDate: new Date("2025-06-03"),
+      totalInstallments: 1,
+      totalAmountCents: 1000n,
+    });
+    // Compra antes del 5 → cierra en junio → primer pago en JUNIO (no julio/agosto).
+    expect(antesDelCierre[0].dueDate.getMonth()).toBe(5); // junio (0-indexed)
+
+    const despuesDelCierre = generateInstallments({
+      cardClosingDay: 5,
+      cardDueDay: 20,
+      currency: "ARS",
+      purchaseDate: new Date("2025-06-10"),
+      totalInstallments: 1,
+      totalAmountCents: 1000n,
+    });
+    // Compra después del 5 → cierra en julio → primer pago en JULIO (no agosto).
+    expect(despuesDelCierre[0].dueDate.getMonth()).toBe(6); // julio
   });
 
   it("si el vencimiento cae fin de semana, se corre al lunes", () => {
@@ -93,7 +132,34 @@ describe("generateInstallments", () => {
   });
 });
 
-describe("interés (RF-3.5: monto recargado en N cuotas iguales)", () => {
+describe("impliedMonthlyRate (TEM derivada del recargo, RF-3.5)", () => {
+  it("sin recargo (financiado = original) ⇒ 0", () => {
+    expect(impliedMonthlyRate(10000n, 10000n, 6)).toBe(0);
+  });
+
+  it("financiado menor al original ⇒ 0 (no inventamos tasa negativa)", () => {
+    expect(impliedMonthlyRate(10000n, 9000n, 6)).toBe(0);
+  });
+
+  it("1 cuota: la tasa es el recargo directo (final/original − 1)", () => {
+    // 11000 / 10000 = 1,10 ⇒ 10 % en el único período
+    expect(impliedMonthlyRate(10000n, 11000n, 1)).toBeCloseTo(10, 1);
+  });
+
+  it("N cuotas: recupera la TEM del sistema francés", () => {
+    // 10000 al 10 % mensual en 12 cuotas (francés) ⇒ cuota ≈ 1467,6 ⇒ total ≈ 17612
+    expect(impliedMonthlyRate(10000n, 17612n, 12)).toBeCloseTo(10, 1);
+  });
+
+  it("a mayor recargo, mayor TEM (monotonía)", () => {
+    const baja = impliedMonthlyRate(10000n, 11000n, 6);
+    const alta = impliedMonthlyRate(10000n, 13000n, 6);
+    expect(baja).toBeGreaterThan(0);
+    expect(alta).toBeGreaterThan(baja);
+  });
+});
+
+describe("generateInstallments con total financiado (con recargo)", () => {
   const base = {
     cardClosingDay: 20,
     cardDueDay: 10,
@@ -101,65 +167,27 @@ describe("interés (RF-3.5: monto recargado en N cuotas iguales)", () => {
     currency: "ARS" as const,
   };
 
-  it("tasa null o 0 ⇒ sin recargo (idéntico al caso sin interés)", () => {
-    expect(surchargedTotalCents(10000n, null, 6)).toBe(10000n);
-    expect(surchargedTotalCents(10000n, 0, 6)).toBe(10000n);
-    expect(surchargedTotalCents(10000n, undefined, 6)).toBe(10000n);
-
-    const sinTasa = generateInstallments({ ...base, totalInstallments: 6, totalAmountCents: 60000n });
-    const tasaCero = generateInstallments({
-      ...base,
-      totalInstallments: 6,
-      totalAmountCents: 60000n,
-      interestRateMonthly: 0,
-    });
-    expect(tasaCero.map((r) => r.amountCents)).toEqual(sinTasa.map((r) => r.amountCents));
-  });
-
-  it("tasa positiva con N chico (3 cuotas al 5% mensual)", () => {
-    // 10000 * 1.05^3 = 11576.25 → 11576 ; 11576/3 = 3858 resto 2 → 3858, 3858, 3860
-    expect(surchargedTotalCents(10000n, 5, 3)).toBe(11576n);
-
+  it("reparte el total final con el sobrante en las primeras cuotas", () => {
+    // Total financiado 11576 en 3 ⇒ base 3858 resto 2 ⇒ 3859 + 3859 + 3858
     const result = generateInstallments({
       ...base,
       totalInstallments: 3,
-      totalAmountCents: 10000n,
-      interestRateMonthly: 5,
+      totalAmountCents: 11576n,
     });
-    expect(result.map((r) => r.amountCents)).toEqual([3858n, 3858n, 3860n]);
+    expect(result.map((r) => r.amountCents)).toEqual([3859n, 3859n, 3858n]);
     const total = result.reduce((acc, r) => acc + r.amountCents, 0n);
     expect(total).toBe(11576n);
   });
 
-  it("la suma de cuotas iguala exactamente el total recargado (24 cuotas al 8%)", () => {
-    const totalAmountCents = 1_234_567n;
-    const interestRateMonthly = 8;
-    const totalInstallments = 24;
-
-    const recargado = surchargedTotalCents(totalAmountCents, interestRateMonthly, totalInstallments);
-    expect(recargado).toBeGreaterThan(totalAmountCents);
-
+  it("la suma de cuotas iguala exactamente el total financiado (24 cuotas)", () => {
+    const financed = 1_333_330n;
     const result = generateInstallments({
       ...base,
-      totalInstallments,
-      totalAmountCents,
-      interestRateMonthly,
+      totalInstallments: 24,
+      totalAmountCents: financed,
     });
     const total = result.reduce((acc, r) => acc + r.amountCents, 0n);
-    expect(total).toBe(recargado);
+    expect(total).toBe(financed);
     expect(result).toHaveLength(24);
-  });
-
-  it("la última cuota absorbe el redondeo también con interés", () => {
-    const result = generateInstallments({
-      ...base,
-      totalInstallments: 3,
-      totalAmountCents: 10000n,
-      interestRateMonthly: 5,
-    });
-    // las primeras N-1 son iguales; la última puede diferir por el resto
-    expect(result[0].amountCents).toBe(result[1].amountCents);
-    const recargado = surchargedTotalCents(10000n, 5, 3);
-    expect(result[2].amountCents).toBe(recargado - result[0].amountCents * 2n);
   });
 });

@@ -37,6 +37,7 @@ Es un **proyecto de portfolio** para saltar de un rol de QA a uno full stack. Po
 @.claude/rules/seguridad.md
 @.claude/rules/testing.md
 @.claude/rules/ui.md
+@.claude/rules/rsc-y-payload.md
 
 ## Convenciones rápidas
 

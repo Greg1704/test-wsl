@@ -32,3 +32,18 @@ export const cardSchema = z.object({
 });
 
 export type CardFormValues = z.infer<typeof cardSchema>;
+
+/**
+ * Renovación de una tarjeta vencida: SOLO un nuevo vencimiento MM/AA futuro. No
+ * toca el resto de los datos (es la misma cuenta), así las cuotas siguen atadas.
+ */
+export const renewCardSchema = z.object({
+  expiration: z
+    .string()
+    .regex(MMYY, "Formato MM/AA (ej. 08/29)")
+    .refine((v) => !MMYY.test(v) || !isCardExpired(parseExpiration(v)), {
+      message: "El nuevo vencimiento debe ser una fecha futura",
+    }),
+});
+
+export type RenewCardValues = z.infer<typeof renewCardSchema>;

@@ -77,7 +77,7 @@ model Purchase {
   totalInstallments       Int      // N cuotas (>= 1)
   purchaseDate            DateTime @db.Date
   firstInstallmentDueDate DateTime @db.Date     // calculada al insertar
-  interestRateMonthly     Decimal? @db.Decimal(8, 4)  // tasa mensual si hay interés
+  interestRateMonthly     Decimal? @db.Decimal(8, 4)  // TEM derivada del recargo (no es input)
   notes                   String?
   createdAt               DateTime @default(now())
 
@@ -149,23 +149,29 @@ model ExchangeRate {
 function generateInstallments(input) {
   const { cardClosingDay, cardDueDay, purchaseDate, totalInstallments, totalAmountCents } = input;
 
-  // 1) ¿Entra en este cierre o pasa al siguiente?
+  // 1a) ¿En qué mes CIERRA el resumen donde cae la compra?
   const purchaseDay = getDate(purchaseDate);
-  const firstStatementMonth = purchaseDay <= cardClosingDay
-    ? addMonths(purchaseDate, 1)
-    : addMonths(purchaseDate, 2);
+  const statementClosingMonth = purchaseDay <= cardClosingDay
+    ? purchaseDate                 // cierra este mes
+    : addMonths(purchaseDate, 1);  // pasa al cierre del mes siguiente
 
-  // 2) Reparto de centavos (la última cuota absorbe el resto)
+  // 1b) El pago vence en el primer dueDay POSTERIOR al cierre: mismo mes si el
+  //     vencimiento cae más tarde que el cierre, mes siguiente si cae antes/igual.
+  const firstDueMonth = cardDueDay > cardClosingDay
+    ? statementClosingMonth
+    : addMonths(statementClosingMonth, 1);
+
+  // 2) Reparto de centavos (el sobrante se reparte de a 1 en las primeras cuotas)
   const n = BigInt(totalInstallments);
   const baseCents = totalAmountCents / n;
-  const remainder = totalAmountCents - baseCents * n;
+  const remainder = Number(totalAmountCents - baseCents * n); // 0..N-1 centavos
 
   // 3) N filas
   return Array.from({ length: totalInstallments }, (_, i) => ({
     installmentNumber: i + 1,
-    amountCents: i === totalInstallments - 1 ? baseCents + remainder : baseCents,
+    amountCents: i < remainder ? baseCents + 1n : baseCents,
     // nextBusinessDay corre el vencimiento al lunes si cae fin de semana.
-    dueDate: nextBusinessDay(setDate(addMonths(firstStatementMonth, i), cardDueDay)),
+    dueDate: nextBusinessDay(setDate(addMonths(firstDueMonth, i), cardDueDay)),
     status: "PENDING" as const,
   }));
 }
@@ -188,22 +194,28 @@ hay riesgo de desborde de día (29/30/31 en meses cortos).
 
 ## Cálculo de cuotas con interés (RF-3.5)
 
-`Purchase.interestRateMonthly` es la **tasa mensual** del financiamiento (en %, ej. `5.5` = 5,5 % mensual). En Argentina la práctica más común en compras con tarjeta es informar un **monto recargado** que se paga en **N cuotas iguales**, así que ese es el modelo que usamos.
+**El usuario ingresa el total final (con recargo), no una tasa.** En el retail argentino el comercio informa el plan como **"N cuotas de $X"** o un **monto recargado**, nunca una tasa mensual. Modelamos exactamente eso: el alta de la compra toma el **monto original** (`totalAmount`) y, opcionalmente, el **total con recargo** (`financedTotal`). Sin recargo, ambos son iguales.
 
-**Sistema elegido: monto recargado en N cuotas iguales, con interés compuesto mensual.**
+**Sistema: el total final se reparte en N cuotas iguales.**
 
 ```
-i = interestRateMonthly / 100            // tasa mensual como fracción
-totalRecargadoCents = round( totalAmountCents * (1 + i)^N )
+financedTotalCents = financedTotal ? toCents(financedTotal) : originalCents
+base   = financedTotalCents / N        // división entera BigInt
+resto  = financedTotalCents - base * N
+cuota[i] = (i < resto) ? base + 1 : base       // el sobrante va en las primeras
 ```
 
-- El factor `(1 + i)^N` se calcula en punto flotante (las tasas son fraccionarias por naturaleza) y el resultado se **redondea al centavo más cercano** una sola vez, obteniendo `totalRecargadoCents` como `BigInt`. A partir de ahí **toda la aritmética es entera** (BigInt), igual que sin interés.
-- El reparto en N cuotas iguales reutiliza la regla de redondeo ya existente: `base = totalRecargado / N` (división entera) y la **última cuota absorbe el resto**, de modo que la suma de las cuotas es **exactamente** `totalRecargadoCents` (al centavo).
-- **`interestRateMonthly` `null` o `0` ⇒ sin recargo:** `totalRecargado = totalAmountCents`, idéntico al comportamiento histórico (no se aplica ningún factor).
+- El reparto usa la regla de redondeo de siempre (los centavos sobrantes se reparten de a **1 en las primeras cuotas**), de modo que la suma de las cuotas es **exactamente** `financedTotalCents` (al centavo). Toda la aritmética es entera (BigInt).
+- `Purchase.totalAmountCents` guarda el **monto original**. El total financiado no se persiste como columna: es la **suma de las cuotas** (`Installment.amountCents`). El "recargo %" se deriva contra el original.
+- **Sin `financedTotal` (o igual al monto) ⇒ sin recargo:** las cuotas reparten el monto original, idéntico al caso sin interés.
 
-Ejemplo: $100,00 (`10000`) en 3 cuotas al 5 % mensual → factor `1,05³ = 1,157625` → recargado `11576` → cuotas `3858 + 3858 + 3860 = 11576`. ✔
+### TEM derivada (`impliedMonthlyRate`)
 
-> No usamos sistema francés (cuota fija por amortización con intereses decrecientes): para el mercado AR de retail es menos representativo y más difícil de explicar/testear. Si en el futuro se modela un préstamo bancario real, se evaluará agregarlo como una estrategia aparte.
+A partir de `(monto original, total financiado, N)` derivamos la **tasa efectiva mensual** implícita —solo para mostrarla— resolviendo por **bisección** la `i` que iguala el valor presente de las N cuotas iguales al monto original (**sistema francés**): `original = cuota · (1 − (1+i)^−N) / i`. Se guarda en `Purchase.interestRateMonthly` (que pasó de ser un *input* a ser un valor *derivado*). `0`/`null` si no hay recargo.
+
+Ejemplo: $100,00 (`10000`) que el comercio ofrece en **3 cuotas de $38,59** → total financiado `11576` → cuotas `3859 + 3859 + 3858 = 11576`. ✔  TEM derivada ≈ 5 % mensual.
+
+> No usamos `(1 + i)^N` sobre el total (interés compuesto sobre el capital completo): sobreestima fuertemente el costo porque asume que nunca se amortiza capital (un préstamo *bullet*), p. ej. 10 % mensual en 12 cuotas triplicaría el total. Al tomar el total final como input evitamos ese sesgo y coincidimos con lo que el usuario ve en la caja. La TEM derivada usa el sistema francés, que sí modela la amortización.
 
 ## Deployment
 

@@ -24,8 +24,13 @@ export default async function DashboardLayout({
               >
                 Tarjetas
               </Link>
-              {/* Placeholders de las próximas fases */}
-              <span className="text-muted-foreground/40">Compras</span>
+              <Link
+                href="/compras"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Compras
+              </Link>
+              {/* Placeholder de la próxima fase */}
               <span className="text-muted-foreground/40">Calendario</span>
             </div>
           </div>

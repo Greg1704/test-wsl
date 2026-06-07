@@ -1,23 +1,29 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { deactivateCard } from "@/server/actions/cards";
+import { deletePurchase } from "@/server/actions/purchases";
 import { Button } from "@/components/ui/button";
 
-export function DeactivateCardButton({ cardId }: { cardId: string }) {
+/**
+ * Borra una compra (y, en cascada, sus cuotas — RF-3.7) con confirmación inline,
+ * siguiendo el patrón de `deactivate-card-button`. Al borrar, vuelve al listado.
+ */
+export function DeletePurchaseButton({ purchaseId }: { purchaseId: string }) {
   const [confirming, setConfirming] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const router = useRouter();
 
-  async function handleDeactivate() {
+  async function handleDelete() {
     setIsPending(true);
     try {
-      await deactivateCard(cardId);
-      toast.success("Tarjeta desactivada");
-    } catch (e) {
-      // El server lanza un mensaje propio si hay cuotas pendientes.
-      toast.error(e instanceof Error ? e.message : "No pudimos desactivar la tarjeta.");
+      await deletePurchase(purchaseId);
+      toast.success("Compra eliminada");
+      router.push("/compras");
+    } catch {
+      toast.error("No pudimos eliminar la compra.");
       setIsPending(false);
       setConfirming(false);
     }
@@ -26,7 +32,7 @@ export function DeactivateCardButton({ cardId }: { cardId: string }) {
   if (!confirming) {
     return (
       <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
-        Desactivar
+        Eliminar
       </Button>
     );
   }
@@ -36,10 +42,10 @@ export function DeactivateCardButton({ cardId }: { cardId: string }) {
       <Button
         variant="destructive"
         size="sm"
-        onClick={handleDeactivate}
+        onClick={handleDelete}
         disabled={isPending}
       >
-        {isPending ? "…" : "¿Confirmar?"}
+        {isPending ? "…" : "¿Eliminar la compra y sus cuotas?"}
       </Button>
       <Button
         variant="ghost"
