@@ -1,14 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-
 import type { InstallmentStatus } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
-import { markInstallmentPaid, revertInstallment } from "@/server/actions/installments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { INSTALLMENT_STATUS_META } from "./installment-status-meta";
+import { useInstallmentMutations } from "./use-installment-mutations";
 
 /** Cuota ya serializada para el cliente (sin BigInt; montos formateados). */
 export type InstallmentView = {
@@ -21,20 +18,6 @@ export type InstallmentView = {
   paidAt: string | null;
 };
 
-const STATUS_META: Record<
-  InstallmentStatus,
-  { label: string; variant: "outline" | "destructive"; className?: string }
-> = {
-  PENDING: { label: "Pendiente", variant: "outline" },
-  PAID: {
-    label: "Pagada",
-    variant: "outline",
-    className:
-      "border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  },
-  OVERDUE: { label: "Vencida", variant: "destructive" },
-};
-
 export function InstallmentList({
   installments,
   total,
@@ -42,26 +25,12 @@ export function InstallmentList({
   installments: InstallmentView[];
   total: number;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
-  function run(action: () => Promise<void>, okMsg: string) {
-    startTransition(async () => {
-      try {
-        await action();
-        toast.success(okMsg);
-        // El Server Action ya revalidó la ruta; refrescamos el RSC abierto.
-        router.refresh();
-      } catch {
-        toast.error("No pudimos actualizar la cuota. Intentá de nuevo.");
-      }
-    });
-  }
+  const { isPending, markPaid, revert } = useInstallmentMutations();
 
   return (
     <div className="grid gap-2">
       {installments.map((inst) => {
-        const meta = STATUS_META[inst.status];
+        const meta = INSTALLMENT_STATUS_META[inst.status];
         const isPaid = inst.status === "PAID";
         return (
           <div
@@ -82,7 +51,7 @@ export function InstallmentList({
                   variant="ghost"
                   size="sm"
                   disabled={isPending}
-                  onClick={() => run(() => revertInstallment(inst.id), "Cuota revertida")}
+                  onClick={() => revert(inst.id)}
                 >
                   Revertir
                 </Button>
@@ -91,9 +60,7 @@ export function InstallmentList({
                   variant="outline"
                   size="sm"
                   disabled={isPending}
-                  onClick={() =>
-                    run(() => markInstallmentPaid(inst.id), "Cuota marcada como pagada")
-                  }
+                  onClick={() => markPaid(inst.id)}
                 >
                   Marcar pagada
                 </Button>

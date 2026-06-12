@@ -27,6 +27,7 @@ async function setInstallmentStatus(id: string, data: Prisma.InstallmentUpdateIn
   await prisma.installment.update({ where: { id: installment.id }, data });
 
   revalidatePath("/dashboard");
+  revalidatePath("/calendario");
   revalidatePath("/compras");
   revalidatePath(`/compras/${installment.purchaseId}`);
 }

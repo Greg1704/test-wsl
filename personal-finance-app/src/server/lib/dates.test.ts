@@ -9,6 +9,8 @@ import {
   parseExpiration,
   formatExpiration,
   isCardExpired,
+  monthParamToDate,
+  monthRange,
 } from "./dates";
 
 describe("dates", () => {
@@ -89,6 +91,44 @@ describe("dates", () => {
 
       vi.setSystemTime(new Date(2027, 8, 1, 0, 0, 0)); // 01/09/2027
       expect(isCardExpired(exp)).toBe(true);
+    });
+  });
+
+  describe("monthParamToDate / monthRange", () => {
+    it("monthParamToDate: 'YYYY-MM' → primer día de ese mes", () => {
+      const d = monthParamToDate("2026-06")!;
+      expect(d.getFullYear()).toBe(2026);
+      expect(d.getMonth()).toBe(5); // junio (0-indexed)
+      expect(d.getDate()).toBe(1);
+    });
+
+    it("monthParamToDate: undefined o inválido → undefined", () => {
+      expect(monthParamToDate(undefined)).toBeUndefined();
+      expect(monthParamToDate("no-es-fecha")).toBeUndefined();
+    });
+
+    it("monthRange: borde superior EXCLUSIVO (inicio del mes siguiente)", () => {
+      const { gte, lt } = monthRange(new Date(2026, 5, 15)); // junio
+      expect(gte.getMonth()).toBe(5); // junio
+      expect(gte.getDate()).toBe(1);
+      expect(lt.getMonth()).toBe(6); // julio
+      expect(lt.getDate()).toBe(1);
+      expect(gte.getTime()).toBeLessThan(lt.getTime());
+    });
+
+    // Regresión de zona horaria. Los `@db.Date` que filtra monthRange vuelven como
+    // medianoche UTC; los bordes los arma con `startOfMonth` (hora local). Asume
+    // runtime UTC (invariante en ARCHITECTURE, "Zona horaria del runtime"): bajo una
+    // TZ negativa el día 1 se cae y se cuela el día 1 del mes siguiente, y falla.
+    it("monthRange: incluye día 1 y último día; excluye el día 1 del mes siguiente", () => {
+      const { gte, lt } = monthRange(monthParamToDate("2026-06")!);
+      const dbDate = (s: string) => new Date(`${s}T00:00:00Z`); // como un @db.Date
+      const inRange = (d: Date) => d >= gte && d < lt;
+
+      expect(inRange(dbDate("2026-06-01"))).toBe(true); // primer día propio
+      expect(inRange(dbDate("2026-06-30"))).toBe(true); // último día propio
+      expect(inRange(dbDate("2026-05-31"))).toBe(false); // mes anterior
+      expect(inRange(dbDate("2026-07-01"))).toBe(false); // mes siguiente, NO se cuela
     });
   });
 });

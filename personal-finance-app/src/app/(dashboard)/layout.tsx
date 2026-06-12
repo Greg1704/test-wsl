@@ -30,8 +30,18 @@ export default async function DashboardLayout({
               >
                 Compras
               </Link>
-              {/* Placeholder de la próxima fase */}
-              <span className="text-muted-foreground/40">Calendario</span>
+              <Link
+                href="/calendario"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Calendario
+              </Link>
+              <Link
+                href="/configuracion"
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Configuración
+              </Link>
             </div>
           </div>
           <SignOutButton />

@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { startOfMonth, addMonths } from "date-fns";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
+import { monthRange } from "@/server/lib/dates";
 import {
   purchaseSchema,
   editPurchaseSchema,
@@ -108,15 +108,8 @@ export async function listPurchases(filters: unknown = {}) {
   if (categoryId === NO_CATEGORY_FILTER) where.categoryId = null;
   else if (categoryId) where.categoryId = categoryId;
   if (currency) where.currency = currency;
-  if (month) {
-    // Borde superior EXCLUSIVO (`lt` al inicio del mes siguiente). Con `lte:
-    // endOfMonth` el wall-clock local 23:59:59 cae el día 1 siguiente en UTC
-    // (en AR, UTC-3), y una compra `@db.Date` del día 1 leakearía a este mes.
-    where.purchaseDate = {
-      gte: startOfMonth(month),
-      lt: startOfMonth(addMonths(month, 1)),
-    };
-  }
+  // Rango del mes con borde superior exclusivo (TZ-safe). Ver monthRange.
+  if (month) where.purchaseDate = monthRange(month);
 
   return prisma.purchase.findMany({
     where,

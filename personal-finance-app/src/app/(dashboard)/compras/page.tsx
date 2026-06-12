@@ -6,7 +6,7 @@ import { listActiveCards } from "@/server/actions/cards";
 import { listCategories } from "@/server/actions/categories";
 import type { PurchaseFilters as Filters } from "@/lib/validation/purchase";
 import { formatMoney } from "@/server/lib/money";
-import { formatDate } from "@/server/lib/dates";
+import { formatDate, monthParamToDate } from "@/server/lib/dates";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -27,13 +27,6 @@ type SearchParams = {
   month?: string; // "YYYY-MM"
 };
 
-/** "YYYY-MM" → primer día de ese mes (la action filtra por el rango del mes). */
-function monthToDate(month?: string): Date | undefined {
-  if (!month) return undefined;
-  const date = new Date(`${month}-01T00:00:00`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
 export default async function ComprasPage({
   searchParams,
 }: {
@@ -45,7 +38,7 @@ export default async function ComprasPage({
     cardId: sp.cardId,
     categoryId: sp.categoryId,
     currency: sp.currency === "ARS" || sp.currency === "USD" ? sp.currency : undefined,
-    month: monthToDate(sp.month),
+    month: monthParamToDate(sp.month),
   };
 
   // Server Component: lee la DB directo. El dinero se formatea acá (server),

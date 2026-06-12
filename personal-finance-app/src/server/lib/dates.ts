@@ -6,13 +6,36 @@ import {
   getDay,
   lastDayOfMonth,
   startOfDay,
+  startOfMonth,
   startOfToday,
   format,
   parseISO,
 } from "date-fns";
 import { es } from "date-fns/locale";
 
-export { addMonths, setDate, getDate, addDays, startOfToday, parseISO };
+export { addMonths, setDate, getDate, addDays, startOfMonth, startOfToday, parseISO };
+
+/** "YYYY-MM" → primer día de ese mes (hora local). `undefined` si no es válido. */
+export function monthParamToDate(month?: string): Date | undefined {
+  if (!month) return undefined;
+  const date = new Date(`${month}-01T00:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+/** "YYYY-MM" de una fecha, para armar los links de navegación mes a mes. */
+export function formatMonthParam(date: Date): string {
+  return format(date, "yyyy-MM");
+}
+
+/**
+ * Rango [inicio, finExclusivo) de un mes para filtrar columnas `@db.Date`.
+ * Borde superior EXCLUSIVO (`lt`) a propósito: con `lte: endOfMonth` el wall-clock
+ * local 23:59:59 cae el día 1 siguiente en UTC (AR, UTC-3) y arrastra cuotas del
+ * mes siguiente. Ver .claude/rules/dinero-y-fechas.md.
+ */
+export function monthRange(month: Date): { gte: Date; lt: Date } {
+  return { gte: startOfMonth(month), lt: startOfMonth(addMonths(month, 1)) };
+}
 
 /**
  * Convierte "MM/AA" en el último día de ese mes (la tarjeta es válida hasta fin

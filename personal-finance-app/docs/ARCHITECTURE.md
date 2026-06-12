@@ -192,6 +192,37 @@ banco. Las fechas son una estimación con precisión de ±1-2 días hábiles. Co
 fechas de cierre/vencimiento se usan siempre en la primera quincena del mes, tampoco
 hay riesgo de desborde de día (29/30/31 en meses cortos).
 
+### Zona horaria del runtime (invariante: el proceso corre en UTC)
+
+**El proceso de Node DEBE correr en UTC.** Producción ya lo hace (los contenedores
+Docker usan UTC por defecto); en desarrollo, asegurate de que el runtime también esté
+en UTC (la mayoría de los entornos lo están; si tu máquina no, exportá `TZ=UTC` antes
+de `npm run dev` / `npm test`).
+
+Por qué es un invariante y no un detalle: las columnas `@db.Date` (fechas de
+calendario, sin hora — `dueDate`, `purchaseDate`, `expirationDate`) vuelven del driver
+como **medianoche UTC** (ej. `'2026-06-09'` → `2026-06-09T00:00:00.000Z`). Todo el
+manejo date-only del código (`startOfToday`, `startOfMonth`/`monthRange`,
+`computeDisplayStatus`, `groupInstallmentsByDate`, el `format` de date-fns para mostrar
+el día) opera en **hora local del proceso**. Mientras local == UTC, ambos lados
+coinciden y todo es correcto.
+
+Si el proceso corriera en una TZ negativa (ej. AR, UTC−3), local y UTC se desfasan y
+aparece un corrimiento de **−1 día** sistémico: una cuota que vence *hoy* se contaría
+como vencida, el calendario mostraría cada vencimiento un día antes, y `monthRange`
+dejaría afuera el día 1 del mes y se colaría el día 1 del siguiente. **No es un bug
+mientras se respete el invariante UTC** — por eso no normalizamos cada cálculo a UTC
+(implicaría `date-fns-tz` para el formateo, más complejidad). Lo fijamos como invariante
+y lo blindamos con tests:
+
+- `src/server/lib/installment-status.test.ts` — "vence hoy ≠ vencida" con `dueDate`
+  UTC-midnight y un `now` con hora (el caso real).
+- `src/server/lib/dates.test.ts` — `monthRange` incluye el día 1 / último día y
+  excluye el día 1 del mes siguiente.
+
+Esos tests **asumen runtime UTC**: bajo una TZ no-UTC fallan a propósito y delatan que
+el proceso no está en UTC.
+
 ## Cálculo de cuotas con interés (RF-3.5)
 
 **El usuario ingresa el total final (con recargo), no una tasa.** En el retail argentino el comercio informa el plan como **"N cuotas de $X"** o un **monto recargado**, nunca una tasa mensual. Modelamos exactamente eso: el alta de la compra toma el **monto original** (`totalAmount`) y, opcionalmente, el **total con recargo** (`financedTotal`). Sin recargo, ambos son iguales.

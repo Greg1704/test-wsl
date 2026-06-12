@@ -4,21 +4,30 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/server/auth/session", () => ({ requireUser: vi.fn() }));
 vi.mock("@/server/db", () => ({
   prisma: {
-    card: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    card: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     purchase: {
       create: vi.fn(),
       findFirst: vi.fn(),
       findMany: vi.fn(),
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
+      count: vi.fn(),
     },
-    installment: { createMany: vi.fn(), findFirst: vi.fn(), update: vi.fn(), count: vi.fn() },
+    installment: {
+      createMany: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+      count: vi.fn(),
+      groupBy: vi.fn(),
+    },
     category: {
       create: vi.fn(),
       findFirst: vi.fn(),
       updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
+    user: { findUnique: vi.fn(), update: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -44,6 +53,12 @@ import {
   updateCategory,
   deleteCategory,
 } from "@/server/actions/categories";
+import {
+  getMonthlyOverview,
+  getOnboardingStatus,
+  listInstallmentsByMonth,
+} from "@/server/actions/dashboard";
+import { updateMonthlyIncome } from "@/server/actions/settings";
 
 const USER_A = "user-aaaaaaaaaaaaaaaaaaaaaa";
 const USER_B = "user-bbbbbbbbbbbbbbbbbbbbbb";
@@ -293,5 +308,85 @@ describe("autorización cross-user (RNF-1.1)", () => {
         where: { id: CATEGORY_OF_A, userId: USER_B },
       });
     });
+  });
+});
+
+describe("dashboard y configuración (Fase 3)", () => {
+  const USER = USER_A;
+
+  it("updateMonthlyIncome escribe SIEMPRE el userId de la sesión", async () => {
+    asUser(USER);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    await updateMonthlyIncome({ monthlyIncome: 1_500_000, defaultCurrency: "ARS" });
+
+    expect(vi.mocked(prisma.user.update)).toHaveBeenCalledWith({
+      where: { id: USER },
+      data: { monthlyIncomeCents: 150_000_000n, defaultCurrency: "ARS" },
+    });
+  });
+
+  it("updateMonthlyIncome rechaza un ingreso negativo (no toca la DB)", async () => {
+    asUser(USER);
+
+    await expect(
+      updateMonthlyIncome({ monthlyIncome: -1, defaultCurrency: "ARS" })
+    ).rejects.toThrow();
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("getMonthlyOverview scopea por userId; neto solo en la moneda principal", async () => {
+    asUser(USER);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      monthlyIncomeCents: 1000n,
+      defaultCurrency: "ARS",
+    } as never);
+    vi.mocked(prisma.installment.groupBy).mockResolvedValue([
+      { currency: "ARS", _sum: { amountCents: 300n } },
+      { currency: "USD", _sum: { amountCents: 50n } },
+    ] as never);
+    vi.mocked(prisma.installment.count).mockResolvedValue(2);
+    vi.mocked(prisma.installment.findFirst).mockResolvedValue(null);
+
+    const overview = await getMonthlyOverview(new Date("2026-06-15"));
+
+    // El groupBy va scopeado por el userId vía la relación purchase.
+    expect(vi.mocked(prisma.installment.groupBy)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ purchase: { userId: USER } }),
+      })
+    );
+    const ars = overview.currencies.find((c) => c.currency === "ARS")!;
+    const usd = overview.currencies.find((c) => c.currency === "USD")!;
+    expect(ars.committedCents).toBe(300n);
+    expect(ars.netCents).toBe(700n); // 1000 − 300, solo en la moneda principal
+    expect(usd.netCents).toBeNull(); // USD no es la principal → sin neto
+    expect(overview.overdueCount).toBe(2);
+  });
+
+  it("listInstallmentsByMonth scopea por el userId de sesión", async () => {
+    asUser(USER);
+    vi.mocked(prisma.installment.findMany).mockResolvedValue([] as never);
+
+    await listInstallmentsByMonth(new Date("2026-06-15"));
+
+    expect(vi.mocked(prisma.installment.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ purchase: { userId: USER } }),
+      })
+    );
+  });
+
+  it("getOnboardingStatus cuenta tarjetas/compras scopeadas por el userId de sesión", async () => {
+    asUser(USER);
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({ monthlyIncomeCents: 0n } as never);
+    vi.mocked(prisma.card.count).mockResolvedValue(1);
+    vi.mocked(prisma.purchase.count).mockResolvedValue(0);
+
+    const status = await getOnboardingStatus();
+
+    expect(vi.mocked(prisma.card.count)).toHaveBeenCalledWith({ where: { userId: USER } });
+    expect(vi.mocked(prisma.purchase.count)).toHaveBeenCalledWith({ where: { userId: USER } });
+    expect(status).toEqual({ hasIncome: false, hasCards: true, hasPurchases: false });
   });
 });
