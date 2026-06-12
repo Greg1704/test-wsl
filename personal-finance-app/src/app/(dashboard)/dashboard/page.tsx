@@ -182,14 +182,17 @@ export default async function DashboardPage({
       {/* KPIs de la moneda principal. Los dos primeros siguen al mes navegado;
           deuda restante y horizonte son siempre relativos a hoy. */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* La métrica estrella del producto va en la card de marca (esmeralda). */}
         <KpiCard
           title="Disponible neto"
           icon={Wallet}
+          variant="brand"
           value={
             main.netCents !== null ? formatMoney(main.netCents, main.currency) : "—"
           }
           valueClassName={
-            main.netCents !== null && main.netCents < 0n ? "text-destructive" : undefined
+            // Sobre fondo esmeralda el rojo no lee: el negativo va en rojo claro.
+            main.netCents !== null && main.netCents < 0n ? "text-red-200" : undefined
           }
           hint={
             main.incomeCents !== null && main.incomeCents > 0n

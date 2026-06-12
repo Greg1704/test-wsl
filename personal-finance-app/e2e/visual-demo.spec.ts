@@ -29,6 +29,11 @@ test.describe("capturas del rediseño", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test("dashboard + páginas en claro y oscuro", async ({ page }) => {
+    // Login primero como página (branding de auth), después como sesión.
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
+    await page.screenshot({ path: `${OUT}/login-light.png` });
+
     await login(page);
 
     // Dejar terminar la animación de los charts antes de capturar.

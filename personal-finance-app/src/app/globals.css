@@ -49,24 +49,26 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* Marca: esmeralda (finanzas) como identidad activa, no solo acento. Los grises
+     llevan un tinte verde sutil (chroma 0.005–0.03 en hue ~165-172) y el sidebar
+     es esmeralda profundo en ambos temas. Las cards quedan blancas para contraste. */
+  --background: oklch(0.984 0.006 165);
+  --foreground: oklch(0.165 0.012 170);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.165 0.012 170);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* Marca: esmeralda (finanzas). Fondos neutros, acento en primary/ring/charts. */
+  --popover-foreground: oklch(0.165 0.012 170);
   --primary: oklch(0.596 0.145 163.225);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.955 0.018 166);
+  --secondary-foreground: oklch(0.3 0.045 170);
+  --muted: oklch(0.96 0.012 166);
+  --muted-foreground: oklch(0.5 0.028 168);
+  --accent: oklch(0.945 0.032 165);
+  --accent-foreground: oklch(0.33 0.055 169);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.908 0.016 166);
+  --input: oklch(0.908 0.016 166);
   --ring: oklch(0.696 0.17 162.48);
   /* Paleta categórica para charts: esmeralda primero, luego contrastes. */
   --chart-1: oklch(0.696 0.17 162.48);
@@ -75,47 +77,50 @@
   --chart-4: oklch(0.606 0.25 292.717);
   --chart-5: oklch(0.645 0.246 16.439);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.596 0.145 163.225);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.696 0.17 162.48);
+  /* Sidebar esmeralda profundo también en modo claro: es el ancla de marca. */
+  --sidebar: oklch(0.27 0.048 171);
+  --sidebar-foreground: oklch(0.96 0.014 165);
+  --sidebar-primary: oklch(0.696 0.17 162.48);
+  --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
+  --sidebar-accent: oklch(0.35 0.06 168);
+  --sidebar-accent-foreground: oklch(0.985 0.01 165);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.765 0.177 163.223);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  /* En dark el esmeralda sube un paso de luminosidad para mantener contraste. */
+  /* Dark = "verde-negro": los fondos llevan tinte esmeralda (no gris puro) y el
+     esmeralda sube un paso de luminosidad para mantener contraste. */
+  --background: oklch(0.14 0.014 174);
+  --foreground: oklch(0.97 0.008 165);
+  --card: oklch(0.19 0.02 172);
+  --card-foreground: oklch(0.97 0.008 165);
+  --popover: oklch(0.19 0.02 172);
+  --popover-foreground: oklch(0.97 0.008 165);
   --primary: oklch(0.696 0.17 162.48);
   --primary-foreground: oklch(0.262 0.051 172.552);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.26 0.026 171);
+  --secondary-foreground: oklch(0.97 0.008 165);
+  --muted: oklch(0.25 0.022 172);
+  --muted-foreground: oklch(0.71 0.025 168);
+  --accent: oklch(0.29 0.038 170);
+  --accent-foreground: oklch(0.97 0.008 165);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(0.93 0.04 165 / 12%);
+  --input: oklch(0.93 0.04 165 / 16%);
   --ring: oklch(0.596 0.145 163.225);
   --chart-1: oklch(0.765 0.177 163.223);
   --chart-2: oklch(0.777 0.152 181.912);
   --chart-3: oklch(0.828 0.189 84.429);
   --chart-4: oklch(0.702 0.183 293.541);
   --chart-5: oklch(0.712 0.194 13.428);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
+  /* Sidebar: un paso más oscuro que el fondo, siempre esmeralda. */
+  --sidebar: oklch(0.205 0.032 172);
+  --sidebar-foreground: oklch(0.96 0.014 165);
   --sidebar-primary: oklch(0.696 0.17 162.48);
   --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.30 0.05 169);
+  --sidebar-accent-foreground: oklch(0.985 0.01 165);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.596 0.145 163.225);
 }

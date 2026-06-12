@@ -92,7 +92,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 </div>
                 <div className="grid leading-tight">
                   <span className="font-semibold tracking-tight">CuotApp</span>
-                  <span className="text-muted-foreground text-xs">
+                  {/* El sidebar es esmeralda oscuro: los secundarios usan su token. */}
+                  <span className="text-sidebar-foreground/70 text-xs">
                     Cuotas bajo control
                   </span>
                 </div>
@@ -132,12 +133,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg">
-                  <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-xs font-semibold">
+                  <div className="bg-sidebar-accent text-sidebar-accent-foreground flex size-8 items-center justify-center rounded-lg text-xs font-semibold">
                     {initials}
                   </div>
                   <div className="grid leading-tight">
                     <span className="truncate text-sm font-medium">{user.name}</span>
-                    <span className="text-muted-foreground truncate text-xs">
+                    <span className="text-sidebar-foreground/70 truncate text-xs">
                       {user.email}
                     </span>
                   </div>

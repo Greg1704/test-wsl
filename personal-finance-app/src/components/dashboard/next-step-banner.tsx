@@ -32,7 +32,7 @@ export function NextStepBanner({ flags }: { flags: OnboardingFlags }) {
   const banner = STEP_BANNER[step];
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-dashed p-4">
+    <div className="border-primary/35 bg-primary/5 flex items-center justify-between gap-3 rounded-xl border border-dashed p-4">
       <p className="text-muted-foreground text-sm">{banner.text}</p>
       <Button asChild size="sm">
         <Link href={banner.href}>{banner.cta}</Link>
