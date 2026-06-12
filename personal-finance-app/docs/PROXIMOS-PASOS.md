@@ -1,9 +1,41 @@
 # Próximos pasos — continuación de sesión
 
-Estado al cerrar la sesión del **2026-05-31**. Sirve para retomar el trabajo
+Estado al cerrar la sesión del **2026-06-12**. Sirve para retomar el trabajo
 sin tener que reconstruir el contexto.
 
 ## Qué se hizo
+
+### Sesión 2026-06-12 — Rediseño visual + dashboard con gráficos (Fase 3)
+
+- **Dashboard rediseñado**: 4 KPI cards (disponible neto, cuotas del mes con % del
+  ingreso y barra de progreso, deuda restante, "libre de cuotas"), **proyección a
+  12 meses** (barras apiladas por tarjeta con línea de ingreso, un chart por moneda)
+  y **donut de gasto por categoría** (RF-7.3 adelantado a Fase 3; ROADMAP y
+  REQUIREMENTS actualizados). Datos vía helpers puros testeados en
+  `src/server/lib/dashboard.ts` (`buildProjection`, `buildCategoryBreakdown`,
+  `percentOfIncome`).
+- **Recharts** (vía componentes `chart` de shadcn/ui) agregado al stack.
+- **Rediseño de toda la app**: sidebar lateral colapsable (shadcn `sidebar`) con
+  ítem activo, menú de usuario (tema claro/oscuro/sistema + sign out) y drawer en
+  mobile; tema **esmeralda** en light/dark; calendario con chips de fecha, "hoy"
+  resaltado y totales por día.
+- **E2E verde en Docker** (pendiente 2 ✅). Fixes encadenados que lo bloqueaban:
+  1. El hostname `app` activa el **HSTS preload del TLD `.app`** en Chromium
+     (fuerza https → `ERR_SSL_PROTOCOL_ERROR`); ahora el E2E usa el alias
+     `cuotapp` (docker-compose).
+  2. `allowedDevOrigins: ["cuotapp"]` en `next.config.ts` (Next 16 bloquea
+     `/_next/*` cross-origin en dev y la página nunca hidrata).
+  3. `authClient` sin `baseURL` absoluto (usa el origen actual) +
+     `BETTER_AUTH_TRUSTED_ORIGINS` para el origen del E2E.
+  4. `TooltipProvider` global en el root layout (el sidebar colapsable lo requiere).
+- **Herramientas de QA visual**: `scripts/seed-demo.ts` (cuenta demo con datos
+  realistas ARS+USD; ⚠️ borra tarjetas/compras del usuario elegido) y
+  `e2e/visual-demo.spec.ts` (screenshots con `DEMO_SHOTS=1`). Cuenta demo:
+  `a@gmail.com` / `demo-cuotapp-2026`.
+
+**Verde:** `npm run typecheck`, `npm test` (108 tests / 11 archivos) y
+`npx playwright test` en Docker (4 passed). `npm run lint` mantiene 3 errores
+**preexistentes** (`card-form-dialog`, `categories-manager-dialog`), ninguno nuevo.
 
 ### Sesión 2026-05-29
 Se implementó **completo** el `docs/SETUP_HANDOFF.md` (bloques A–F) en el commit
@@ -92,17 +124,13 @@ ahoy logs-app         # confirmar que Next.js arrancó en :3000
 - Confirmar el **hook de categorías**: registrar un usuario y verificar en
   `npx prisma studio` que se crean las 8 categorías por defecto.
 
-### 2. Dejar verde el E2E
+### 2. Dejar verde el E2E — ✅ hecho (sesión 2026-06-12)
+Corre en Docker contra la app de dev:
 ```bash
-# Crear la DB de test (desde WSL, una sola vez)
-createdb -h localhost -U app cuotas_test
-# Aplicar migraciones a esa DB
-DATABASE_URL="postgresql://app:dev@localhost:5432/cuotas_test?schema=public" npx prisma migrate deploy
-# Instalar browsers de Playwright (una sola vez)
-npx playwright install
-npm run test:e2e
+docker compose run --rm --no-deps e2e
 ```
-La parte de auth debería pasar; el flujo de compra sigue en `test.skip`.
+La parte de auth pasa; el flujo de compra sigue en `test.skip` (habilitarlo es el
+próximo paso natural ahora que la UI existe).
 
 ### 3. Decisiones chicas
 - ✅ **`middleware.ts` → `proxy.ts`**: migrado con el codemod oficial de Next 16.

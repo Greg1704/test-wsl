@@ -21,7 +21,7 @@ export default async function ConfiguracionPage() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-10">
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-10">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
         <p className="text-muted-foreground text-sm">
@@ -30,6 +30,6 @@ export default async function ConfiguracionPage() {
       </header>
 
       <IncomeForm initial={initial} />
-    </main>
+    </div>
   );
 }

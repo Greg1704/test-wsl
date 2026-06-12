@@ -2,7 +2,13 @@
 
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
-import { monthRange, startOfToday } from "@/server/lib/dates";
+import { addMonths, monthRange, startOfMonth, startOfToday } from "@/server/lib/dates";
+import {
+  buildCategoryBreakdown,
+  buildProjection,
+  type CategoryBreakdown,
+  type ProjectionSeries,
+} from "@/server/lib/dashboard";
 import type { OnboardingFlags } from "@/server/lib/onboarding";
 
 /** Resumen de una moneda para el mes (RF-5.1). `income`/`net` solo en la principal. */
@@ -116,6 +122,106 @@ export async function getOnboardingStatus(): Promise<OnboardingFlags> {
     hasCards: cardCount > 0,
     hasPurchases: purchaseCount > 0,
   };
+}
+
+/**
+ * Serie para el gráfico de proyección: cuotas comprometidas de los próximos
+ * `months` meses desde `fromMonth`, por moneda y desglosadas por tarjeta (la
+ * vista consolidada multi-tarjeta del producto). El armado de la serie es una
+ * función pura testeada (`buildProjection`); acá solo va la query, scopeada
+ * por el `userId` de sesión.
+ */
+export async function getProjection(
+  fromMonth: Date,
+  months: number = 12
+): Promise<ProjectionSeries[]> {
+  const user = await requireUser();
+  const start = startOfMonth(fromMonth);
+  const end = startOfMonth(addMonths(fromMonth, months));
+
+  const rows = await prisma.installment.findMany({
+    where: { dueDate: { gte: start, lt: end }, purchase: { userId: user.id } },
+    select: {
+      dueDate: true,
+      amountCents: true,
+      currency: true,
+      purchase: { select: { card: { select: { id: true, name: true } } } },
+    },
+  });
+
+  return buildProjection(
+    rows.map((r) => ({
+      dueDate: r.dueDate,
+      amountCents: r.amountCents,
+      currency: r.currency,
+      cardId: r.purchase.card.id,
+      cardName: r.purchase.card.name,
+    })),
+    fromMonth,
+    months
+  );
+}
+
+/**
+ * Desglose por categoría de las cuotas que vencen en el mes (RF-7.3, adelantado
+ * a Fase 3), por moneda. El agrupado es puro y testeado (`buildCategoryBreakdown`).
+ */
+export async function getCategoryBreakdown(month: Date): Promise<CategoryBreakdown[]> {
+  const user = await requireUser();
+  const { gte, lt } = monthRange(month);
+
+  const rows = await prisma.installment.findMany({
+    where: { dueDate: { gte, lt }, purchase: { userId: user.id } },
+    select: {
+      amountCents: true,
+      currency: true,
+      purchase: {
+        select: {
+          category: { select: { id: true, name: true, color: true } },
+        },
+      },
+    },
+  });
+
+  return buildCategoryBreakdown(
+    rows.map((r) => ({
+      amountCents: r.amountCents,
+      currency: r.currency,
+      category: r.purchase.category,
+    }))
+  );
+}
+
+/** Deuda pendiente total de una moneda: monto, cantidad de cuotas y última fecha. */
+export type DebtStat = {
+  currency: string;
+  remainingCents: bigint;
+  pendingCount: number;
+  lastDueDate: Date | null;
+};
+
+/**
+ * Resumen de la deuda restante por moneda: todas las cuotas PENDING (incluidas
+ * las vencidas), cuántas son y cuándo vence la última. Alimenta los KPI "deuda
+ * restante" y "última cuota" del dashboard.
+ */
+export async function getDebtStats(): Promise<DebtStat[]> {
+  const user = await requireUser();
+
+  const grouped = await prisma.installment.groupBy({
+    by: ["currency"],
+    where: { status: "PENDING", purchase: { userId: user.id } },
+    _sum: { amountCents: true },
+    _count: { _all: true },
+    _max: { dueDate: true },
+  });
+
+  return grouped.map((g) => ({
+    currency: g.currency,
+    remainingCents: g._sum.amountCents ?? 0n,
+    pendingCount: g._count._all,
+    lastDueDate: g._max.dueDate,
+  }));
 }
 
 /**

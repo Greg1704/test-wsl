@@ -27,11 +27,18 @@ services:
       DATABASE_URL: "postgresql://app:dev@postgres:5432/cuotas?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
       BETTER_AUTH_URL: "http://localhost:3000"
+      # El E2E navega por el alias del contenedor; hay que declararlo confiable.
+      BETTER_AUTH_TRUSTED_ORIGINS: "http://cuotapp:3000"
       NEXT_PUBLIC_APP_URL: "http://localhost:3000"
     depends_on:
       postgres:
         condition: service_healthy
     command: sh -c "npx prisma migrate deploy && npm run dev"
+    networks:
+      default:
+        # "app" a secas activa el HSTS preload del TLD .app en Chromium (fuerza
+        # https y rompe los E2E con ERR_SSL_PROTOCOL_ERROR); el alias lo evita.
+        aliases: [cuotapp]
 
   e2e:
     image: mcr.microsoft.com/playwright:v1.60.0-noble
@@ -40,7 +47,7 @@ services:
       - .:/e2e
       - e2e_node_modules:/e2e/node_modules  # node_modules separados (Ubuntu vs Alpine)
     environment:
-      PLAYWRIGHT_BASE_URL: "http://app:3000"
+      PLAYWRIGHT_BASE_URL: "http://cuotapp:3000"
       DATABASE_URL_TEST: "postgresql://app:dev@postgres:5432/cuotas_test?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
     depends_on:

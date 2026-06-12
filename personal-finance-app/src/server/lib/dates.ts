@@ -4,6 +4,7 @@ import {
   getDate,
   addDays,
   getDay,
+  differenceInCalendarDays,
   lastDayOfMonth,
   startOfDay,
   startOfMonth,
@@ -70,6 +71,11 @@ export function nextBusinessDay(date: Date): Date {
   if (day === 6) return addDays(date, 2);
   if (day === 0) return addDays(date, 1);
   return date;
+}
+
+/** Días de calendario desde hoy hasta `date` (0 = hoy; negativo = ya pasó). */
+export function daysFromToday(date: Date): number {
+  return differenceInCalendarDays(date, startOfToday());
 }
 
 export function formatDate(date: Date, pattern: string = "d MMM yyyy"): string {

@@ -85,7 +85,7 @@ export default async function ComprasPage({
   const hasFilters = Boolean(sp.cardId || sp.categoryId || sp.currency || sp.month);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Mis compras</h1>
@@ -186,6 +186,6 @@ export default async function ComprasPage({
           )}
         </>
       )}
-    </main>
+    </div>
   );
 }

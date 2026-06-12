@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // resuelve sus datos (Suspense bajo el capó).
 export default function Loading() {
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
+    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
       <div className="flex items-center justify-between gap-4">
         <div className="grid gap-2">
           <Skeleton className="h-7 w-40" />
@@ -13,6 +13,6 @@ export default function Loading() {
         <Skeleton className="h-9 w-32" />
       </div>
       <Skeleton className="h-64 w-full rounded-xl" />
-    </main>
+    </div>
   );
 }

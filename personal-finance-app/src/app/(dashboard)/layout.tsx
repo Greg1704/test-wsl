@@ -1,53 +1,33 @@
-import Link from "next/link";
-
 import { requireUser } from "@/server/auth/session";
-import { SignOutButton } from "@/components/sign-out-button";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   // Garantiza sesión en todo el grupo (dashboard); si no hay, redirige a /login.
-  await requireUser();
+  const user = await requireUser();
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <header className="border-b">
-        <nav className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-6">
-            <Link href="/dashboard" className="font-semibold tracking-tight">
-              CuotApp
-            </Link>
-            <div className="flex items-center gap-4 text-sm">
-              <Link
-                href="/tarjetas"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Tarjetas
-              </Link>
-              <Link
-                href="/compras"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Compras
-              </Link>
-              <Link
-                href="/calendario"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Calendario
-              </Link>
-              <Link
-                href="/configuracion"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Configuración
-              </Link>
-            </div>
-          </div>
-          <SignOutButton />
-        </nav>
-      </header>
-      {children}
-    </div>
+    <SidebarProvider>
+      {/* Al sidebar (Client Component) le pasamos solo strings serializables. */}
+      <AppSidebar
+        user={{ name: user.name?.trim() || user.email, email: user.email }}
+      />
+      {/* SidebarInset es el <main> de la página; las pages usan <div> como raíz. */}
+      <SidebarInset>
+        <header className="bg-background/80 sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
+          <SidebarTrigger />
+          <Separator orientation="vertical" className="!h-4" />
+          <span className="text-muted-foreground text-sm">CuotApp</span>
+        </header>
+        {children}
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

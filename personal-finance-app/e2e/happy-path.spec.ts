@@ -10,8 +10,10 @@ test.describe("autenticación (RNF-6.3, parte 1)", () => {
     const password = "password-segura-123";
     const name = "QA Tester";
 
-    // signup
+    // signup. networkidle espera la hidratación: en dev Next compila la página en
+    // la primera visita y un click prematuro dispara el submit GET nativo del form.
     await page.goto("/signup");
+    await page.waitForLoadState("networkidle");
     await page.getByLabel("Nombre").fill(name);
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Contraseña").fill(password);
@@ -20,8 +22,9 @@ test.describe("autenticación (RNF-6.3, parte 1)", () => {
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
 
-    // logout
-    await page.getByRole("button", { name: "Cerrar sesión" }).click();
+    // logout: el sign-out vive en el menú de usuario del sidebar (footer)
+    await page.getByRole("button", { name: new RegExp(name) }).click();
+    await page.getByRole("menuitem", { name: "Cerrar sesión" }).click();
     await expect(page).toHaveURL(/\/login/);
 
     // login con las mismas credenciales

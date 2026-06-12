@@ -71,7 +71,7 @@ Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
 
 - **RF-7.1** El usuario debe poder crear, editar y eliminar categorías propias (ej. "Indumentaria", "Tecnología", "Supermercado").
 - **RF-7.2** El sistema debe proveer un seed inicial de categorías comunes en español al crear la cuenta.
-- **RF-7.3** *(Post-MVP)* Gráfico de gastos por categoría.
+- **RF-7.3** *(MVP — adelantado a Fase 3)* Gráfico de gastos por categoría (donut en el dashboard).
 
 ### RF-8. Simulador de compras (MVP, Fase 4)
 
@@ -174,9 +174,9 @@ Definición canónica de las fases en `docs/ROADMAP.md`. **MVP = Fases 1-4.**
 |---|---|
 | Fase 1 — Tarjetas | RF-1, RF-2 |
 | Fase 2 — Core de cuotas | RF-3, RF-4, RF-7 |
-| Fase 3 — Dashboard + calendario | RF-5, RF-6, RF-9.1 |
+| Fase 3 — Dashboard + calendario | RF-5, RF-6, RF-9.1, RF-7.3 (adelantado) |
 | Fase 4 — Simulador (cierre del MVP) | RF-8 |
-| Post-MVP | RF-1.7, RF-1.8, RF-4.5, RF-7.3, RF-9.2, RF-10 |
+| Post-MVP | RF-1.7, RF-1.8, RF-4.5, RF-9.2, RF-10 |
 | Fase 5 — Testing + CI/CD | RNF-5, RNF-6 |
 | Fase 6 — Deploy | RNF-4, RNF-10 |
 | Transversal (todas las fases) | RNF-1, RNF-2, RNF-3, RNF-7, RNF-8, RNF-9 |
