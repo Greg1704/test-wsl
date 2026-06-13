@@ -19,7 +19,7 @@ acá. Ante cualquier discrepancia, **este archivo manda**.
 | **Fase 1** — Tarjetas | CRUD de tarjetas (alta/edición/soft delete), banco + color | RF-2 | ✅ Hecho |
 | **Fase 2** — Core de cuotas | Registro de compras + generación de `Installment`, gestión de cuotas, categorías | RF-3, RF-4, RF-7 | ✅ Hecho |
 | **Fase 3** — Dashboard + Calendario | "Disponible neto de cuotas" mes a mes, vista consolidada multi-tarjeta (proyección a 12 meses por tarjeta), calendario de vencimientos, gráfico por categoría | RF-5, RF-6, RF-9.1, RF-7.3 (adelantado) | ✅ Hecho |
-| **Fase 4** — Simulador | Simulador previo a la compra ("si compro en N cuotas, así queda mi flujo futuro") | RF-8 | ✅ Hecho (v1; A/B RF-8.3 → v2) |
+| **Fase 4** — Simulador | Simulador previo a la compra ("si compro en N cuotas, así queda mi flujo futuro") + comparación de dos escenarios | RF-8 | ✅ Hecho (v1 + v2/A-B) |
 
 ### 🏁 Frontera del MVP = Fases 1-4
 

@@ -51,4 +51,33 @@ describe("SimulatorClient", () => {
     expect(screen.getByText("Detalle mes a mes")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Después" })).toBeInTheDocument();
   });
+
+  it("activar 'Comparar' revela Plan A y Plan B", () => {
+    render(<SimulatorClient {...baseProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comparar con otro plan/ }));
+    expect(screen.getByText("Plan A")).toBeInTheDocument();
+    expect(screen.getByText("Plan B")).toBeInTheDocument();
+    expect(screen.getByText(/Completá ambos planes/)).toBeInTheDocument();
+  });
+
+  it("con ambos planes completos, muestra la comparación A vs B", async () => {
+    render(<SimulatorClient {...baseProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /Comparar con otro plan/ }));
+
+    // Plan A: tarjeta (combobox 0) + monto.
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByRole("option", { name: /Visa Galicia/ }));
+    // Plan B: tarjeta (combobox 2) + monto.
+    fireEvent.click(screen.getAllByRole("combobox")[2]);
+    fireEvent.click(await screen.findByRole("option", { name: /Visa Galicia/ }));
+
+    const amounts = screen.getAllByLabelText("Monto total");
+    fireEvent.change(amounts[0], { target: { value: "30000" } });
+    fireEvent.change(amounts[1], { target: { value: "60000" } });
+
+    // Aparece la vista comparativa con la tabla de métricas.
+    expect(await screen.findByText("Comparación")).toBeInTheDocument();
+    expect(screen.getByText("Cuota mensual")).toBeInTheDocument();
+    expect(screen.getByText("Total a pagar")).toBeInTheDocument();
+  });
 });

@@ -5,6 +5,28 @@ sin tener que reconstruir el contexto.
 
 ## Qué se hizo
 
+### Sesión 2026-06-13 (cont.) — Simulador v2: comparar dos escenarios (RF-8.3)
+
+- **Toggle "Comparar con otro plan"** en `/simulador`: por defecto un escenario (v1);
+  al activarlo aparece el **Plan B** y el resultado pasa a la vista comparativa. Las dos
+  compras son **independientes** (pueden diferir en tarjeta/monto/fecha/cuotas/recargo).
+- **Vista comparativa**: tabla de métricas A vs B (cuotas, cuota mensual, total, recargo,
+  TEM, "cuándo te liberás", pico de % del ingreso) + **veredicto** (diferencia de total y
+  de cuota mensual) + **chart overlay** de líneas (comprometido por mes de cada plan +
+  ingreso). Overlay y veredicto solo si A y B comparten moneda (RF-9.1); si difieren, tabla
+  por separado con nota.
+- **Refactor para reuso**: hook `use-scenario.ts` (form + plan + impacto de un escenario,
+  usado por A y B), `scenario-form.tsx` (form extraído), `scenario-impact.tsx` (resultado v1),
+  `comparison-view.tsx` + `comparison-chart.tsx`. Tipos en `simulador/types.ts`.
+- **2 helpers puros nuevos testeados** en `src/server/lib/scenario-compare.ts`:
+  `buildScenarioMetrics` y `buildComparisonSeries`. `ProjectionChart` ganó un `color?`
+  opcional por serie (gris para lo real, esmeralda para la compra).
+
+**Verde:** `typecheck`, `lint`, `npm test` (**125 tests / 15 archivos**), `build`.
+
+**Pendiente:** QA visual de la vista comparativa (overlay + tabla). Con eso, Fase 4 cerrada
+del todo.
+
 ### Sesión 2026-06-13 (cont.) — Simulador de compras v1 (Fase 4, cierre del MVP)
 
 - **Sección nueva `/simulador`** (ítem en el sidebar con icono `Sparkles`): compra hipotética

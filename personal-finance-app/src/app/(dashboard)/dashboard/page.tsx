@@ -186,13 +186,10 @@ export default async function DashboardPage({
         <KpiCard
           title="Disponible neto"
           icon={Wallet}
-          variant="brand"
+          // En deuda (neto < 0) la card se pone roja (texto blanco); si no, esmeralda.
+          variant={main.netCents !== null && main.netCents < 0n ? "danger" : "brand"}
           value={
             main.netCents !== null ? formatMoney(main.netCents, main.currency) : "—"
-          }
-          valueClassName={
-            // Sobre fondo esmeralda el rojo no lee: el negativo va en rojo claro.
-            main.netCents !== null && main.netCents < 0n ? "text-red-200" : undefined
           }
           hint={
             main.incomeCents !== null && main.incomeCents > 0n

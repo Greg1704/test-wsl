@@ -12,9 +12,10 @@ type KpiCardProps = {
   hint?: string;
   /**
    * "brand": card protagonista en esmeralda (la métrica estrella del producto).
-   * El resto de las cards queda neutro para que esta destaque.
+   * "danger": misma card pero en rojo (mismo nivel de claridad que el esmeralda),
+   * para el disponible neto cuando entrás en deuda. El resto queda neutro.
    */
-  variant?: "default" | "brand";
+  variant?: "default" | "brand" | "danger";
   /** Contenido extra (ej. barra de progreso). */
   children?: React.ReactNode;
 };
@@ -33,20 +34,26 @@ export function KpiCard({
   children,
 }: KpiCardProps) {
   const brand = variant === "brand";
+  const danger = variant === "danger";
+  // Ambas variantes usan fondo de color con texto claro; solo cambia el tono.
+  const accent = brand || danger;
 
   return (
     <Card
       className={cn(
         "gap-2",
         brand &&
-          "border-transparent bg-linear-to-br from-primary to-[oklch(0.47_0.11_166)] text-primary-foreground dark:to-[oklch(0.55_0.135_164)]"
+          "border-transparent bg-linear-to-br from-primary to-[oklch(0.47_0.11_166)] text-primary-foreground dark:to-[oklch(0.55_0.135_164)]",
+        // Rojo con la misma claridad que el esmeralda (mismos L que el gradiente brand).
+        danger &&
+          "border-transparent bg-linear-to-br from-[oklch(0.596_0.2_25)] to-[oklch(0.47_0.16_27)] text-primary-foreground dark:from-[oklch(0.696_0.2_25)] dark:to-[oklch(0.55_0.17_25)]"
       )}
     >
       <CardHeader className="flex items-center justify-between">
         <CardTitle
           className={cn(
             "text-sm font-medium",
-            brand ? "text-primary-foreground/85" : "text-muted-foreground"
+            accent ? "text-primary-foreground/85" : "text-muted-foreground"
           )}
         >
           {title}
@@ -54,7 +61,7 @@ export function KpiCard({
         <Icon
           className={cn(
             "size-4",
-            brand ? "text-primary-foreground/85" : "text-muted-foreground"
+            accent ? "text-primary-foreground/85" : "text-muted-foreground"
           )}
         />
       </CardHeader>
@@ -66,7 +73,7 @@ export function KpiCard({
           <p
             className={cn(
               "text-xs",
-              brand ? "text-primary-foreground/75" : "text-muted-foreground"
+              accent ? "text-primary-foreground/75" : "text-muted-foreground"
             )}
           >
             {hint}
