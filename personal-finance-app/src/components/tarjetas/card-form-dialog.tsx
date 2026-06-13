@@ -165,7 +165,7 @@ export function CardFormDialog({ card, trigger }: Props) {
             <>
               Ya tenés una tarjeta <strong>vencida</strong> con ese banco y esos
               últimos 4 dígitos (<strong>{existing.name}</strong>). Podés renovarla
-              desde la sección "Vencidas", o crear una nueva.
+              desde la sección &quot;Vencidas&quot;, o crear una nueva.
             </>
           ) : (
             <>

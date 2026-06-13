@@ -99,7 +99,7 @@ Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
 - **RNF-1.2** Toda Server Action debe validar sus inputs con Zod, aunque ya hayan sido validados en el cliente.
 - **RNF-1.3** Las contraseñas deben hashearse con un algoritmo moderno (default de Better Auth).
 - **RNF-1.4** Las cookies de sesión deben tener `httpOnly`, `secure` (en prod) y `sameSite: lax`.
-- **RNF-1.5** Los secrets (DB URL, `BETTER_AUTH_SECRET`) nunca deben commitearse; deben vivir en `.env` (local) o en GitHub Secrets / `.env` del VPS (prod).
+- **RNF-1.5** Los secrets (DB URL, `BETTER_AUTH_SECRET`) nunca deben commitearse; deben vivir en `.env` (local) o en las *Environment Variables* de Vercel (prod).
 - **RNF-1.6** El sistema no debe almacenar números completos de tarjeta de crédito.
 
 ### RNF-2. Precisión financiera
@@ -117,10 +117,10 @@ Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
 
 ### RNF-4. Disponibilidad y operación
 
-- **RNF-4.1** La app debe estar disponible 24/7 con un uptime objetivo del 99% (margen aceptable para un proyecto de portfolio).
-- **RNF-4.2** Las migraciones de base de datos deben aplicarse mediante `prisma migrate deploy` en el pipeline de CI/CD; nunca `db push` en producción.
-- **RNF-4.3** El sistema debe poder reconstruirse desde cero con `git clone && docker compose up` (configuración como código).
-- **RNF-4.4** Los backups de la base de datos son responsabilidad operativa del owner del VPS (recomendado: snapshot semanal); no se requiere implementación automatizada para el MVP.
+- **RNF-4.1** La app debe estar disponible 24/7 con un uptime objetivo del 99% (margen aceptable para un proyecto de portfolio). Lo cubren los tiers gratuitos de Vercel (app) y Neon (Postgres).
+- **RNF-4.2** Las migraciones de base de datos deben aplicarse mediante `prisma migrate deploy` como parte del deploy (Build Command de Vercel, contra `DIRECT_URL`); nunca `db push` en producción.
+- **RNF-4.3** El sistema debe ser **configuración como código**: el entorno de desarrollo se reconstruye con `git clone && docker compose up`, y producción se reconstruye conectando el repo a Vercel + creando la base en Neon, con las variables de entorno documentadas en `ARCHITECTURE.md`.
+- **RNF-4.4** Los backups de la base de datos los provee **Neon** (point-in-time restore en su tier); no se requiere implementación manual para el MVP.
 
 ### RNF-5. Calidad de código
 
@@ -160,9 +160,9 @@ Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
 
 ### RNF-10. Deployment
 
-- **RNF-10.1** El sistema debe poder deployarse mediante una imagen Docker construida con multi-stage build, con la imagen final menor a 400MB.
-- **RNF-10.2** El pipeline de deployment debe ser idempotente (correrlo dos veces no debe romper nada).
-- **RNF-10.3** Las migraciones deben aplicarse automáticamente como parte del deploy, antes de levantar la nueva versión de la app.
+- **RNF-10.1** El deploy de producción se hace en **Vercel** (plataforma serverless nativa de Next.js), con la base en **Neon**. El repo conectado a Vercel deploya `main` (producción) y cada PR (preview). *(El `Dockerfile` multi-stage standalone <400MB se conserva en el repo para la eventual migración a VPS; no lo usa el deploy actual.)*
+- **RNF-10.2** El deploy debe ser idempotente (correrlo dos veces no rompe nada): `prisma migrate deploy` solo aplica las migraciones pendientes.
+- **RNF-10.3** Las migraciones deben aplicarse automáticamente como parte del deploy, antes de servir la nueva versión: el Build Command de Vercel corre `prisma migrate deploy && next build`, y Vercel solo promueve el deploy si el build (con la migración) terminó OK.
 
 ---
 

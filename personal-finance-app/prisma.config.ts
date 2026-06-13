@@ -9,6 +9,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Las migraciones (DDL) usan la conexión DIRECTA. En prod (Vercel + Neon),
+    // DATABASE_URL apunta al endpoint POOLED (PgBouncer) para el runtime serverless,
+    // que no soporta bien el DDL; por eso migramos contra DIRECT_URL. En dev no existe
+    // ese split, así que cae a DATABASE_URL y nada cambia localmente.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

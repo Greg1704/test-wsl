@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { createElement, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Ban } from "lucide-react";
@@ -50,6 +50,18 @@ export type CategoryListItem = {
 
 const EMPTY: CategoryFormValues = { name: "", color: undefined, icon: undefined };
 
+/**
+ * Resuelve y renderiza el ícono de una categoría. Definido a nivel de módulo (no
+ * dentro del render) porque, con el React Compiler activo, aliasar un componente en
+ * una variable local en cada render dispara la regla `react-hooks/static-components`.
+ */
+function CategoryIcon({ name, className }: { name?: string | null; className?: string }) {
+  const icon = categoryIcon(name);
+  // createElement con binding en minúscula: aliasar a `const Icon = …` y renderizar
+  // <Icon/> dispararía react-hooks/static-components (componente creado en render).
+  return icon ? createElement(icon, { className }) : null;
+}
+
 export function CategoriesManagerDialog({
   categories,
 }: {
@@ -64,8 +76,10 @@ export function CategoriesManagerDialog({
     defaultValues: EMPTY,
   });
 
-  const color = form.watch("color");
-  const icon = form.watch("icon");
+  // useWatch (no form.watch) para suscribirnos sin romper el React Compiler
+  // (regla react-hooks/incompatible-library), igual que en purchase-form-dialog.
+  const color = useWatch({ control: form.control, name: "color" });
+  const icon = useWatch({ control: form.control, name: "icon" });
 
   function resetForm() {
     form.reset(EMPTY);
@@ -169,7 +183,6 @@ export function CategoriesManagerDialog({
                   <Ban className="size-4" />
                 </button>
                 {CATEGORY_ICON_NAMES.map((name) => {
-                  const Icon = categoryIcon(name)!;
                   return (
                     <button
                       key={name}
@@ -182,7 +195,7 @@ export function CategoriesManagerDialog({
                         icon === name && "border-foreground ring-1 ring-foreground"
                       )}
                     >
-                      <Icon className="size-4" />
+                      <CategoryIcon name={name} className="size-4" />
                     </button>
                   );
                 })}
@@ -239,7 +252,6 @@ function CategoryRow({
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const Icon = categoryIcon(category.icon);
   const hasPurchases = category.purchaseCount > 0;
 
   async function handleDelete() {
@@ -266,7 +278,7 @@ function CategoryRow({
         className="flex size-7 shrink-0 items-center justify-center rounded-full"
         style={{ backgroundColor: category.color ?? "var(--muted)" }}
       >
-        {Icon ? <Icon className="size-4 text-white" /> : null}
+        <CategoryIcon name={category.icon} className="size-4 text-white" />
       </span>
       <span className="font-medium">{category.name}</span>
       {hasPurchases && (

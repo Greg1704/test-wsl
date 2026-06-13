@@ -224,7 +224,7 @@ npm test             # tests en verde
 npx prisma studio    # DB accesible
 ```
 
-Si los cinco funcionan, el entorno está listo. El deploy (VPS + Docker Compose + GitHub Actions) está documentado en `docs/ARCHITECTURE.md` y se aborda en la Fase 6 del roadmap.
+Si los cinco funcionan, el entorno está listo. El deploy (Vercel + Neon; Docker queda solo para desarrollo) está documentado en `docs/ARCHITECTURE.md` → Deployment y se aborda en la Fase 6 del roadmap.
 
 ---
 
@@ -236,7 +236,7 @@ Si los cinco funcionan, el entorno está listo. El deploy (VPS + Docker Compose 
 4. **Fase 3** — Calendario + dashboard (ingreso neto de cuotas).
 5. **Fase 4** — Simulador (**cierre del MVP**).
 6. **Fase 5** — Testing + CI/CD.
-7. **Fase 6** — Deploy a VPS.
+7. **Fase 6** — Deploy a Vercel + Neon.
 
 El roadmap canónico, la frontera del MVP (Fases 1-4) y la visión a futuro están en
 `docs/ROADMAP.md`.

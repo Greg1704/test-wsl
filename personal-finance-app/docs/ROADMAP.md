@@ -32,11 +32,17 @@ la competencia, no un agregado posterior.
 
 | Fase | Qué entrega | Requerimientos |
 |---|---|---|
-| **Fase 5** — Testing + CI/CD | Cobertura de dominio, E2E del happy path, pipeline de GitHub Actions | RNF-5, RNF-6 |
-| **Fase 6** — Deploy | Imagen Docker multi-stage + deploy a VPS | RNF-4, RNF-10 |
+| **Fase 5** — Testing + CI/CD | Cobertura de dominio, E2E del happy path, pipeline de GitHub Actions (portón de calidad) | RNF-5, RNF-6 |
+| **Fase 6** — Deploy | Deploy a **Vercel** (app) + **Neon** (Postgres), con migraciones automáticas en el build | RNF-4, RNF-10 |
 
 El testing es **continuo** (cada feature viene con sus tests, ver `.claude/rules/testing.md`);
 la "Fase 5" es el momento de consolidar y montar el CI. La "Fase 6" es el lanzamiento.
+
+> **Postura de deploy (decidida 2026-06-12):** el MVP se lanza en **Vercel + Neon**
+> (serverless, costo $0, cero operación). **Docker queda solo para desarrollo.** El camino
+> VPS + Docker Compose + Caddy queda documentado en `ARCHITECTURE.md` como **opción a
+> futuro**, para cuando la app justifique un servidor propio. El `Dockerfile` de producción
+> se conserva en el repo para ese día.
 
 ---
 

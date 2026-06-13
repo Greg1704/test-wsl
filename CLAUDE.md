@@ -27,7 +27,7 @@ Es un **proyecto de portfolio** para saltar de un rol de QA a uno full stack. Po
 - **Zod** + react-hook-form para validación.
 - **date-fns** para fechas.
 - **Vitest** (unit/component) + **Playwright** (E2E).
-- **Docker** + docker-compose; deploy a VPS.
+- **Docker** + docker-compose (**solo desarrollo**). Deploy de producción: **Vercel** (app) + **Neon** (Postgres). Ver `docs/ARCHITECTURE.md` → Deployment.
 
 ## Reglas de oro (leer SIEMPRE)
 

@@ -1,0 +1,56 @@
+name: CI
+
+# Portón de calidad (RNF-6.2): corre en cada push a main y en cada PR.
+# NO buildea imágenes ni deploya: el build y el deploy de producción los hace
+# Vercel al detectar el push (ver docs/ARCHITECTURE.md → Deployment).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Si llega un push nuevo al mismo branch/PR, cancela el run anterior en curso.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    # La app vive en el subdirectorio personal-finance-app/ (el repo git es la raíz).
+    defaults:
+      run:
+        working-directory: personal-finance-app
+    # Valores dummy: ni el build ni los tests se conectan a la DB ni validan secrets
+    # reales; solo necesitan que las variables existan para no romper en import-time.
+    # Los secrets reales viven en las Environment Variables de Vercel (prod).
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      BETTER_AUTH_SECRET: "ci-dummy-secret-build-only-0000000000000000000000"
+      BETTER_AUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: personal-finance-app/package-lock.json
+
+      # npm ci dispara el postinstall (prisma generate → src/generated/prisma).
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit & component tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

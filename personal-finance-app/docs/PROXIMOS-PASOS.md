@@ -1,9 +1,36 @@
 # Próximos pasos — continuación de sesión
 
-Estado al cerrar la sesión del **2026-06-12**. Sirve para retomar el trabajo
+Estado al cerrar la sesión del **2026-06-13**. Sirve para retomar el trabajo
 sin tener que reconstruir el contexto.
 
 ## Qué se hizo
+
+### Sesión 2026-06-13 — Postura de deploy (Vercel + Neon) + CI (Fase 5)
+
+- **Decisión de deploy:** el MVP se lanza en **Vercel (app) + Neon (Postgres)**,
+  serverless y $0. **Docker queda solo para desarrollo**; VPS + Docker Compose pasa a
+  ser "opción a futuro". Docs reescritos: `ARCHITECTURE.md` (sección Deployment entera),
+  `REQUIREMENTS.md` (RNF-4, RNF-10, RNF-1.5), `ROADMAP.md` (Fase 6), `CLAUDE.md`,
+  `SETUP.md` y `.claude/rules/seguridad.md`.
+- **Prisma listo para Neon:** `prisma.config.ts` migra contra `DIRECT_URL ?? DATABASE_URL`
+  (en prod, DATABASE_URL = endpoint pooled; DIRECT_URL = directo para DDL). `DIRECT_URL`
+  documentado en `.env.example`. El singleton de runtime no cambió.
+- **CI (Fase 5):** `.github/workflows/ci.yml` (en la raíz del repo, `working-directory:
+  personal-finance-app`) corre **typecheck · lint · test · build** en push a main y PRs
+  (Node 20, env dummy para el build). Portón de calidad: NO buildea imagen ni deploya
+  (eso lo hace Vercel).
+- **Lint en verde:** arreglados los 3 errores preexistentes + el de `form.watch`
+  (`card-form-dialog`: comillas escapadas; `categories-manager-dialog`: componente
+  `CategoryIcon` a nivel de módulo con `createElement`, y `form.watch` → `useWatch`).
+
+**Verde:** `npm run typecheck`, `npm run lint` (sin errores), `npm test` (108 tests /
+11 archivos) y `npm run build` (standalone).
+
+**Pendiente — pasos manuales en las cuentas (los hace el owner, no son código):**
+crear el proyecto en Neon (anotar las dos connection strings), conectar el repo a Vercel
+con Root Directory = `personal-finance-app`, cargar las env vars (ver tabla en
+`ARCHITECTURE.md` → Deployment) y setear el Build Command `prisma migrate deploy &&
+next build`. Después: smoke test del happy path en prod.
 
 ### Sesión 2026-06-12 — Rediseño visual + dashboard con gráficos (Fase 3)
 
@@ -154,8 +181,11 @@ enganchar. A medida que existan las pantallas, sacar el `test.skip` del happy pa
 ### 5. Entrega del MVP (Fases 5-6 del roadmap)
 - **Fase 5 — Testing + CI/CD**: dejar verde el E2E (ver pendiente 2) y montar el
   pipeline de GitHub Actions.
-- **Fase 6 — Deploy**: el `Dockerfile` multi-stage de producción **ya existe**; falta
-  el pipeline y el deploy al VPS. Criterios en `docs/ARCHITECTURE.md`.
+- **Fase 6 — Deploy**: **Vercel (app) + Neon (Postgres)**, serverless y $0 (decisión
+  del 2026-06-12; Docker queda solo para dev, VPS es opción a futuro). Paso a paso y
+  variables de entorno en `docs/ARCHITECTURE.md` → Deployment. Tareas: crear base en Neon,
+  conectar el repo a Vercel, cargar env vars, agregar `DIRECT_URL` + fallback en
+  `prisma.config.ts`, y poner el Build Command `prisma migrate deploy && next build`.
 
 ### Opcionales / cosmético
 - Borrar los `public/*.svg` sin usar.

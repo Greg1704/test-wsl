@@ -4,7 +4,7 @@ Modelo de datos, decisiones técnicas y deployment. Leé esto antes de tocar `pr
 
 ## Visión general
 
-App full stack en un solo repo Next.js (App Router): los Server Components y Server Actions son el "backend", los Client Components el "frontend". Persistencia en PostgreSQL vía Prisma. Auth con Better Auth. Todo contenerizado con Docker.
+App full stack en un solo repo Next.js (App Router): los Server Components y Server Actions son el "backend", los Client Components el "frontend". Persistencia en PostgreSQL vía Prisma. Auth con Better Auth. En **desarrollo** todo corre en Docker; en **producción** la app va a Vercel y la base a Neon (ver Deployment).
 
 ```
 Browser ──> Next.js (Server Components / Server Actions) ──> Prisma ──> PostgreSQL
@@ -250,12 +250,104 @@ Ejemplo: $100,00 (`10000`) que el comercio ofrece en **3 cuotas de $38,59** → 
 
 ## Deployment
 
+> **Postura actual (MVP):** la app se deploya en **Vercel** (la plataforma nativa de
+> Next.js) con la base en **Neon** (Postgres serverless administrado). Docker queda
+> **solo para desarrollo** (ver `docker-compose`, abajo). El camino VPS + Docker Compose
+> + Caddy es la **opción a futuro** (sección al final): si la app crece y justifica un
+> servidor propio, ya está documentado y el `Dockerfile` de producción existe para ese día.
+
 - **Local:** `docker compose up -d postgres` + `npm run dev`.
-- **Producción:** VPS (Hetzner CX22 o DigitalOcean) con Docker Compose: contenedores `app` (Next.js standalone) + `postgres` + reverse proxy (Caddy, TLS automático).
-- **CI/CD:** GitHub Actions → lint + typecheck + test → `prisma generate` → build → push de imagen a `ghcr.io` → SSH al VPS → `prisma migrate deploy` → `docker compose up -d`.
+- **Producción:** Vercel (app) + Neon (Postgres).
 
-### Dockerfile (puntos críticos de Prisma)
+### Por qué Vercel + Neon ahora
 
+- **Costo $0** para un proyecto de portfolio (Vercel tier Hobby + Neon tier gratis).
+- **Cero operación:** ni servidor que parchear, ni TLS que renovar, ni backups manuales
+  (Neon hace *point-in-time restore*). El foco queda en el producto, no en la infra.
+- **DX nativa de Next:** build, HTTPS y un dominio `*.vercel.app` salen de fábrica; cada
+  Pull Request genera un **deploy preview** con su propia URL (útil para portfolio y para
+  revisar features antes de mergear).
+
+### Cómo corre (modelo mental)
+
+En Vercel **no hay un contenedor de larga vida**: cada Server Component / Server Action se
+ejecuta como **función serverless** efímera (se levanta por request y se apaga). Eso cambia
+dos cosas respecto del modelo Docker:
+
+```
+Browser ──> Vercel (Next.js: RSC + Server Actions como funciones serverless)
+                ──> Prisma (adapter-pg, conexión POOLED) ──> Neon Postgres
+                         │
+                         └── Better Auth (sesión por cookie)
+```
+
+- **Conexiones a Postgres (pooling).** Muchas funciones efímeras abren muchas conexiones
+  cortas y Postgres tiene un límite bajo. Por eso en prod `DATABASE_URL` apunta al endpoint
+  **pooled** de Neon (PgBouncer), y las **migraciones** (DDL) usan el endpoint **directo**
+  vía `DIRECT_URL`. El singleton (`src/server/db/index.ts`) **no cambia**: sigue pasando
+  `DATABASE_URL` al `PrismaPg`; solo cambia a qué endpoint apunta esa URL en prod.
+  *(Optimización futura opcional: `@prisma/adapter-neon` usa el driver serverless de Neon
+  por WebSocket y baja la latencia de cold start; innecesario para el MVP.)*
+- **Runtime en UTC.** Vercel corre las funciones en UTC → respeta el invariante de zona
+  horaria del proyecto (ver arriba) sin configuración extra.
+- **Versión de Postgres.** Usar **Postgres 16** en Neon, igual que el `postgres:16-alpine`
+  del `docker-compose` de dev → paridad dev/prod (RNF-4.3).
+- **Región.** Poné la función de Vercel y la base de Neon en la **misma región**: Vercel
+  Hobby corre las funciones en `iad1` (US East), así que la base va en **AWS `us-east-1`**.
+  Importa porque cada request le pega varias veces a la DB; ese ida y vuelta DB↔función es
+  el que infla el TTFB (RNF-3.1), no el viaje único usuario↔servidor. *(Optimización futura
+  para usuarios AR: mover **ambos** a São Paulo —Vercel `gru1` + Neon `sa-east-1`—; nunca
+  uno solo.)*
+
+### Variables de entorno en producción
+
+En Vercel → *Project Settings → Environment Variables* (marcadas para *Production*):
+
+| Variable | Valor | Para qué |
+|---|---|---|
+| `DATABASE_URL` | endpoint **pooled** de Neon | runtime (lo usa el adapter) |
+| `DIRECT_URL` | endpoint **directo** de Neon | migraciones (`prisma migrate deploy`) |
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` (uno nuevo, distinto al de dev) | sesiones |
+| `BETTER_AUTH_URL` | URL de producción (ej. `https://cuotapp.vercel.app`) | Better Auth |
+| `NEXT_PUBLIC_APP_URL` | misma URL de producción | auth client en el browser |
+
+`prisma.config.ts` debe usar `DIRECT_URL` para migrar, con fallback a `DATABASE_URL` en dev
+(donde no existe el split pooled/directo): `url: process.env.DIRECT_URL ?? process.env.DATABASE_URL`.
+
+### Migraciones en el deploy (RNF-10.3)
+
+`prisma generate` ya corre en `postinstall`. Para aplicar las migraciones **antes** de servir
+la versión nueva, el **Build Command** de Vercel corre `prisma migrate deploy` (contra
+`DIRECT_URL`) y recién después buildea:
+
+```
+prisma migrate deploy && next build
+```
+
+Vercel solo promueve el deploy a producción si el build (con la migración incluida) terminó
+OK, así que la versión nueva nunca arranca contra un schema sin migrar. `migrate deploy` es
+idempotente (solo aplica lo pendiente) → RNF-10.2. *(Alternativa con más control de orden:
+correr `migrate deploy` en un job de GitHub Actions previo al deploy; para el MVP el Build
+Command alcanza.)*
+
+### CI (GitHub Actions, Fase 5)
+
+GitHub Actions queda como **portón de calidad** (no buildea imagen ni deploya): en cada push
+a `main` y cada PR corre `typecheck`, `lint`, `test` y `build` (RNF-6.2). El **build y el
+deploy los hace Vercel** al detectar el push. Son dos engranajes separados: CI verde por un
+lado, deploy de Vercel por otro.
+
+---
+
+### Opción a futuro: VPS + Docker Compose
+
+Si la app crece y conviene un servidor propio (más control, sin límites de serverless, costo
+fijo), el camino es VPS (Hetzner CX22 o similar) con Docker Compose: contenedores `app`
+(Next.js standalone) + `postgres` + reverse proxy (Caddy, TLS automático), con CI/CD que
+pushea la imagen a `ghcr.io` y hace `prisma migrate deploy` + `docker compose up -d` por SSH.
+El `Dockerfile` de producción (multi-stage, standalone) **ya existe** en el repo para ese día.
+
+**Dockerfile de producción — puntos críticos de Prisma** (para cuando se use):
 - Correr `npx prisma generate` en la etapa de build.
 - Alpine necesita `RUN apk add --no-cache openssl`.
 - Copiar `node_modules/.prisma` y `prisma/` al stage `runner`.
@@ -263,7 +355,10 @@ Ejemplo: $100,00 (`10000`) que el comercio ofrece en **3 cuotas de $38,59** → 
 
 Si falta cualquiera de los tres primeros, la app crashea en runtime con "Prisma Client did not initialize".
 
-## docker-compose (desarrollo)
+## docker-compose (solo desarrollo)
+
+> Docker es la herramienta de **desarrollo** (base local + paridad de entorno + E2E). El
+> deploy de producción es Vercel + Neon (ver Deployment), no usa este compose.
 
 ```yaml
 services:
