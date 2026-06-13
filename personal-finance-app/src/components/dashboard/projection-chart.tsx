@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Rectangle,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -26,8 +27,12 @@ type ProjectionChartProps = {
   currency: string;
   /** Ingreso mensual (en moneda, no centavos) para la línea de referencia. */
   income: number | null;
-  /** Tarjetas de la serie, en el orden de apilado (la de mayor total abajo). */
-  cards: { id: string; name: string }[];
+  /**
+   * Series a apilar, en orden (la de abajo primero). `color` opcional sobreescribe
+   * el color de la paleta (`--chart-N`); lo usa el simulador para diferenciar lo
+   * real (gris) de la compra simulada (esmeralda).
+   */
+  cards: { id: string; name: string; color?: string }[];
   data: ProjectionPoint[];
 };
 
@@ -41,7 +46,10 @@ type ProjectionChartProps = {
 export function ProjectionChart({ currency, income, cards, data }: ProjectionChartProps) {
   // Cada tarjeta toma un color de la paleta del tema (--chart-1..5, cicla si hay más).
   const config: ChartConfig = Object.fromEntries(
-    cards.map((c, i) => [c.id, { label: c.name, color: `var(--chart-${(i % 5) + 1})` }])
+    cards.map((c, i) => [
+      c.id,
+      { label: c.name, color: c.color ?? `var(--chart-${(i % 5) + 1})` },
+    ])
   );
 
   return (
@@ -85,14 +93,28 @@ export function ProjectionChart({ currency, income, cards, data }: ProjectionCha
           }
         />
         <ChartLegend content={<ChartLegendContent />} />
-        {cards.map((c, i) => (
+        {cards.map((c) => (
           <Bar
             key={c.id}
             dataKey={c.id}
             stackId="committed"
             fill={`var(--color-${c.id})`}
-            // Solo el segmento de arriba de la pila lleva el borde redondeado.
-            radius={i === cards.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+            // Redondeo consistente mes a mes: el borde superior lo lleva el segmento
+            // más alto que NO sea cero de cada pila (no siempre la última serie). Así
+            // todos los meses tienen el mismo tope redondeado, tengan o no la serie de
+            // arriba — antes, si esa serie valía 0, el mes mostraba un tope cuadrado.
+            shape={(props) => {
+              const values = (props.payload ?? {}) as Record<string, number>;
+              const topId = [...cards]
+                .reverse()
+                .find((cc) => Number(values[cc.id] ?? 0) > 0)?.id;
+              return (
+                <Rectangle
+                  {...props}
+                  radius={c.id === topId ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                />
+              );
+            }}
           />
         ))}
         {income !== null && income > 0 && (

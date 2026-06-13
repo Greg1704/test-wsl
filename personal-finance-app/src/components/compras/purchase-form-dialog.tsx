@@ -10,7 +10,7 @@ import type { Card, Category } from "@/generated/prisma/client";
 import { cn } from "@/lib/utils";
 import { purchaseSchema, type PurchaseFormValues } from "@/lib/validation/purchase";
 import { createPurchase } from "@/server/actions/purchases";
-import { generateInstallments, impliedMonthlyRate } from "@/server/lib/installments";
+import { buildPurchasePlan } from "@/server/lib/purchase-plan";
 import { currencyToCents, formatMoney } from "@/server/lib/money";
 import { formatDate } from "@/server/lib/dates";
 import { Button } from "@/components/ui/button";
@@ -106,26 +106,18 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
   const preview = useMemo(() => {
     const card = cards.find((c) => c.id === cardId);
     if (!card || !totalAmount || totalAmount <= 0) return null;
-    // El total que se reparte es el final (con recargo); sin recargo, el monto.
-    const hasSurcharge = !!financedTotal && financedTotal > totalAmount;
-    const financed = hasSurcharge ? financedTotal! : totalAmount;
-    const n = totalInstallments || 1;
     try {
-      const rows = generateInstallments({
+      // Misma lógica pura que usa el simulador (Fase 4): una sola fuente de verdad.
+      const plan = buildPurchasePlan({
         cardClosingDay: card.closingDay,
         cardDueDay: card.dueDay,
         purchaseDate: purchaseDate ?? new Date(),
-        totalInstallments: n,
-        totalAmountCents: currencyToCents(financed),
+        totalInstallments: totalInstallments || 1,
+        totalAmountCents: currencyToCents(totalAmount),
+        financedTotalCents: financedTotal ? currencyToCents(financedTotal) : undefined,
         currency: card.currency,
       });
-      const total = rows.reduce((acc, r) => acc + r.amountCents, 0n);
-      // Recargo % y TEM derivada, solo si hay interés.
-      const surchargePct = hasSurcharge ? (financed / totalAmount - 1) * 100 : 0;
-      const tem = hasSurcharge
-        ? impliedMonthlyRate(currencyToCents(totalAmount), currencyToCents(financed), n)
-        : 0;
-      return { rows, total, currency: card.currency, hasSurcharge, surchargePct, tem };
+      return { ...plan, currency: card.currency };
     } catch {
       return null;
     }
@@ -432,7 +424,7 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
                 </p>
                 {preview.hasSurcharge && (
                   <p className="text-muted-foreground">
-                    Total a pagar: {formatMoney(preview.total, preview.currency)} · Recargo
+                    Total a pagar: {formatMoney(preview.totalCents, preview.currency)} · Recargo
                     +{preview.surchargePct.toFixed(1)}% · TEM ≈ {preview.tem.toFixed(1)}%/mes
                   </p>
                 )}

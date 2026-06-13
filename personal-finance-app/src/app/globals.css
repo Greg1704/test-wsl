@@ -51,7 +51,8 @@
 :root {
   /* Marca: esmeralda (finanzas) como identidad activa, no solo acento. Los grises
      llevan un tinte verde sutil (chroma 0.005–0.03 en hue ~165-172) y el sidebar
-     es esmeralda profundo en ambos temas. Las cards quedan blancas para contraste. */
+     es esmeralda (más claro en modo claro, profundo en oscuro). Las cards quedan
+     blancas para contraste. */
   --background: oklch(0.984 0.006 165);
   --foreground: oklch(0.165 0.012 170);
   --card: oklch(1 0 0);
@@ -77,12 +78,13 @@
   --chart-4: oklch(0.606 0.25 292.717);
   --chart-5: oklch(0.645 0.246 16.439);
   --radius: 0.625rem;
-  /* Sidebar esmeralda profundo también en modo claro: es el ancla de marca. */
-  --sidebar: oklch(0.27 0.048 171);
+  /* Sidebar esmeralda: ancla de marca. En modo claro va un tono más claro que en
+     oscuro (texto claro sigue legible); en oscuro es el verde-negro profundo. */
+  --sidebar: oklch(0.42 0.07 168);
   --sidebar-foreground: oklch(0.96 0.014 165);
   --sidebar-primary: oklch(0.696 0.17 162.48);
   --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
-  --sidebar-accent: oklch(0.35 0.06 168);
+  --sidebar-accent: oklch(0.52 0.085 167);
   --sidebar-accent-foreground: oklch(0.985 0.01 165);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.765 0.177 163.223);

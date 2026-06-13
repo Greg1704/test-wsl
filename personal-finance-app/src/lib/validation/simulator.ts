@@ -1,0 +1,27 @@
+import { z } from "zod";
+
+/**
+ * Inputs del simulador (Fase 4, RF-8.1): una compra hipotética que NO se persiste.
+ * Solo lo que afecta el flujo de cuotas — sin descripción/categoría/comercio, que
+ * son datos de registro, no de simulación. La moneda se hereda de la tarjeta.
+ */
+export const simulatorSchema = z
+  .object({
+    cardId: z.cuid({ error: "Elegí una tarjeta" }),
+    totalAmount: z
+      .number({ error: "Ingresá el monto" })
+      .positive("El monto debe ser mayor a 0"),
+    totalInstallments: z.number().int().min(1).max(60),
+    purchaseDate: z.date(),
+    /** Total con recargo informado por el comercio. Vacío o = monto ⇒ sin recargo. */
+    financedTotal: z
+      .number()
+      .positive("El total con recargo debe ser mayor a 0")
+      .optional(),
+  })
+  .refine((d) => d.financedTotal == null || d.financedTotal >= d.totalAmount, {
+    path: ["financedTotal"],
+    error: "El total con recargo no puede ser menor al monto",
+  });
+
+export type SimulatorFormValues = z.infer<typeof simulatorSchema>;

@@ -5,6 +5,32 @@ sin tener que reconstruir el contexto.
 
 ## Qué se hizo
 
+### Sesión 2026-06-13 (cont.) — Simulador de compras v1 (Fase 4, cierre del MVP)
+
+- **Sección nueva `/simulador`** (ítem en el sidebar con icono `Sparkles`): compra hipotética
+  **sin persistir** (RF-8.1) que muestra el impacto **mes a mes en el disponible neto** (RF-8.2)
+  como **chart + tabla**. A/B (RF-8.3) queda para v2.
+- **Arquitectura híbrida**: el baseline (cuotas reales) se calcula en el server (reusa
+  `getProjection`/`getMonthlyOverview`, UTC) y cruza como números; el plan y el impacto se
+  computan reactivos en el cliente (como el preview del form de compra).
+- **2 helpers puros nuevos, testeados**: `buildPurchasePlan` (`src/server/lib/purchase-plan.ts`,
+  **compartido** con el preview del form de compra — DRY) y `buildSimulationImpact`
+  (`src/server/lib/simulation.ts`). Reusa `generateInstallments`, `impliedMonthlyRate`,
+  `buildProjection`, `ProjectionChart`.
+- **Multi-moneda (RF-9.1)**: el neto solo se muestra en la moneda principal; la simulación va
+  en la moneda de la tarjeta.
+- **Fix de doc**: `ARCHITECTURE.md` decía "TEM ≈ 5%" para el ejemplo 10000→11576/3; lo correcto
+  (sistema francés) es **≈ 7,7%** — corregido y cubierto por test.
+- Archivos: `src/server/lib/{purchase-plan,simulation}.ts` (+tests), `src/lib/validation/simulator.ts`,
+  `src/app/(dashboard)/simulador/{page,loading}.tsx`, `src/components/simulador/simulator-client.tsx`
+  (+test). Modificados: `app-sidebar.tsx`, `purchase-form-dialog.tsx` (refactor al helper), `proxy.ts`.
+
+**Verde:** `npm run typecheck`, `npm run lint`, `npm test` (**120 tests / 14 archivos**) y
+`npm run build` (ruta `/simulador` ✓).
+
+**Pendiente:** QA visual del simulador (probar en un preview de Vercel o local con la DB de Docker).
+Con eso, **el MVP (Fases 1-4) queda cerrado**.
+
 ### Sesión 2026-06-13 — Postura de deploy (Vercel + Neon) + CI (Fase 5)
 
 - **Decisión de deploy:** el MVP se lanza en **Vercel (app) + Neon (Postgres)**,

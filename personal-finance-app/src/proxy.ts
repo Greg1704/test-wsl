@@ -22,5 +22,6 @@ export const config = {
     "/dashboard/:path*",
     "/tarjetas",
     "/tarjetas/:path*",
+    "/simulador",
   ],
 };

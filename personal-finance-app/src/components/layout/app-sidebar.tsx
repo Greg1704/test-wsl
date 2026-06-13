@@ -14,6 +14,7 @@ import {
   Moon,
   Settings,
   ShoppingBag,
+  Sparkles,
   Sun,
   Wallet,
 } from "lucide-react";
@@ -46,6 +47,7 @@ const NAV_ITEMS = [
   { href: "/tarjetas", label: "Tarjetas", icon: CreditCard },
   { href: "/compras", label: "Compras", icon: ShoppingBag },
   { href: "/calendario", label: "Calendario", icon: CalendarDays },
+  { href: "/simulador", label: "Simulador", icon: Sparkles },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
@@ -87,12 +89,14 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/dashboard">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                {/* shrink-0: sin esto el flex comprime el cuadro al colapsar el sidebar. */}
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Wallet className="size-4" />
                 </div>
-                <div className="grid leading-tight">
+                {/* El texto de marca se oculta en modo icono (sidebar colapsado). */}
+                <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
                   <span className="font-semibold tracking-tight">CuotApp</span>
-                  {/* El sidebar es esmeralda oscuro: los secundarios usan su token. */}
+                  {/* El sidebar es esmeralda: los secundarios usan su token. */}
                   <span className="text-sidebar-foreground/70 text-xs">
                     Cuotas bajo control
                   </span>
