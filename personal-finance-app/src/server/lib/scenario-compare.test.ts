@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildScenarioMetrics, buildComparisonSeries } from "./scenario-compare";
+import {
+  buildScenarioMetrics,
+  buildComparisonSeries,
+  buildPurchaseOnlySeries,
+} from "./scenario-compare";
 import type { PurchasePlan } from "./purchase-plan";
 import type { SimulationImpact } from "./simulation";
 
@@ -77,5 +81,22 @@ describe("buildComparisonSeries", () => {
     // Más allá del horizonte de A (idx 2,3): A vuelve al baseline.
     expect(series[2]).toMatchObject({ a: 100, b: 120 });
     expect(series[3]).toMatchObject({ a: 100, b: 120 });
+  });
+});
+
+describe("buildPurchaseOnlySeries", () => {
+  it("grafica solo la cuota hipotética de cada plan, sin baseline", () => {
+    // makeImpact pone thisPurchase = al valor pasado.
+    const impactA = makeImpact([150, 150]); // horizonte 2
+    const impactB = makeImpact([120, 120, 120, 120]); // horizonte 4
+
+    const series = buildPurchaseOnlySeries({ impactA, impactB });
+    expect(series).toHaveLength(4);
+    expect(series.map((p) => p.label)).toEqual(["m0", "m1", "m2", "m3"]);
+    // Dentro del horizonte de ambos: la cuota de cada uno.
+    expect(series[1]).toMatchObject({ a: 150, b: 120 });
+    // Más allá del horizonte de A: su cuota es 0 (no vuelve al baseline real).
+    expect(series[2]).toMatchObject({ a: 0, b: 120 });
+    expect(series[3]).toMatchObject({ a: 0, b: 120 });
   });
 });

@@ -87,3 +87,30 @@ export function buildComparisonSeries({
     b: valueAt(impactB, i),
   }));
 }
+
+/**
+ * Serie del chart "puro": solo la cuota hipotética (`thisPurchase`) de A y de B por
+ * mes, sin el comprometido real del baseline. Es la comparación encapsulada de los dos
+ * planes entre sí (RF-9.1). Más allá del horizonte de un escenario su cuota es 0 (esa
+ * compra ya terminó de pagarse). Solo se usa cuando A y B comparten moneda.
+ */
+export function buildPurchaseOnlySeries({
+  impactA,
+  impactB,
+}: {
+  impactA: SimulationImpact;
+  impactB: SimulationImpact;
+}): ComparisonPoint[] {
+  const horizon = Math.max(impactA.months.length, impactB.months.length);
+  const longer =
+    impactA.months.length >= impactB.months.length ? impactA : impactB;
+
+  const valueAt = (impact: SimulationImpact, i: number) =>
+    i < impact.months.length ? impact.months[i].thisPurchase : 0;
+
+  return Array.from({ length: horizon }, (_, i) => ({
+    label: longer.months[i].label,
+    a: valueAt(impactA, i),
+    b: valueAt(impactB, i),
+  }));
+}

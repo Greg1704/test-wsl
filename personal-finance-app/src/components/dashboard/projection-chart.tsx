@@ -52,8 +52,15 @@ export function ProjectionChart({ currency, income, cards, data }: ProjectionCha
     ])
   );
 
+  // El orden de `cards` (y por ende de las <Bar>) puede cambiar al navegar de mes
+  // (se ordenan por total del período). Recharts no re-sincroniza el orden interno
+  // del stack cuando los <Bar> con key se reordenan, así que el segmento más alto
+  // que calcula el shape deja de coincidir con el realmente pintado. Remontamos el
+  // chart cuando cambia el orden para que el stack arranque limpio en cada navegación.
+  const stackKey = cards.map((c) => c.id).join("|");
+
   return (
-    <ChartContainer config={config} className="aspect-auto h-72 w-full">
+    <ChartContainer key={stackKey} config={config} className="aspect-auto h-72 w-full">
       <BarChart data={data} margin={{ top: 16, right: 8, left: 8 }}>
         <CartesianGrid vertical={false} />
         <XAxis

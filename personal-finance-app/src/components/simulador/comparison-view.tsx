@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 
 import {
   buildComparisonSeries,
+  buildPurchaseOnlySeries,
   buildScenarioMetrics,
   type ScenarioMetrics,
 } from "@/server/lib/scenario-compare";
@@ -97,6 +98,12 @@ export function ComparisonView({
     [sameCurrency, sharedBaselineCommitted, impactA, impactB]
   );
 
+  // Comparación "pura": solo las cuotas de cada plan, sin el comprometido real.
+  const purchaseOnlySeries = useMemo(
+    () => (sameCurrency ? buildPurchaseOnlySeries({ impactA, impactB }) : null),
+    [sameCurrency, impactA, impactB]
+  );
+
   return (
     <>
       <Card>
@@ -130,6 +137,16 @@ export function ComparisonView({
             </TableBody>
           </Table>
 
+          {purchaseOnlySeries && (
+            <ComparisonChart
+              currency={a.currency}
+              income={null}
+              aName="Plan A"
+              bName="Plan B"
+              data={purchaseOnlySeries}
+            />
+          )}
+
           {!sameCurrency && (
             <p className="text-muted-foreground text-sm">
               Los planes están en monedas distintas ({a.currency} y {b.currency}): se comparan
@@ -161,6 +178,7 @@ export function ComparisonView({
           </CardContent>
         </Card>
       )}
+
     </>
   );
 }

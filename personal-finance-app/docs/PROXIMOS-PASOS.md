@@ -5,6 +5,27 @@ sin tener que reconstruir el contexto.
 
 ## Qué se hizo
 
+### Sesión 2026-06-15 — Simulador (chart de comparación pura) + E2E happy path (Fase 5)
+
+- **Simulador / Comparación:** nuevo gráfico **dentro** del recuadro "Comparación"
+  (debajo de la tabla, sin título propio) que compara **solo las cuotas de cada plan**
+  (`thisPurchase`), sin el comprometido real ni línea de ingreso — comparación pura A vs B.
+  Helper puro nuevo `buildPurchaseOnlySeries` en `scenario-compare.ts` (+test). El chart
+  "Comprometido por mes" (real + compra) queda intacto como tarjeta aparte.
+- **E2E happy path (RNF-6.3, parte 2) habilitado:** se sacó el `test.skip` de
+  `e2e/happy-path.spec.ts`. Flujo real verde: **crear tarjeta → compra en 6 cuotas →
+  calendario → marcar cuota pagada** (entra al detalle desde el propio calendario). Detalles
+  de implementación: los Select de Radix se alcanzan por `getByLabel` (shadcn cablea
+  `id`/`htmlFor`); el calendario se navega por `goto(?month=YYYY-MM)` (no por el botón
+  "Mes siguiente", cuya soft-nav competía con el "Compiling…" del dev server); `.first()`
+  en los botones de alta porque el estado vacío duplica el CTA.
+
+**Verde:** `typecheck`, `lint`, `npm test` (**126 tests / 15 archivos**) y E2E (**3/3**,
+`docker compose run --rm --no-deps e2e`).
+
+**Estado:** CI + unit + E2E happy path completos → **Fase 5 cerrada**. **Fase 6 (deploy)
+ya está viva en producción** (Vercel + Neon). Con esto el **MVP (Fases 1-6) queda completo**.
+
 ### Sesión 2026-06-13 (cont.) — Simulador v2: comparar dos escenarios (RF-8.3)
 
 - **Toggle "Comparar con otro plan"** en `/simulador`: por defecto un escenario (v1);
@@ -199,13 +220,13 @@ ahoy logs-app         # confirmar que Next.js arrancó en :3000
 - Confirmar el **hook de categorías**: registrar un usuario y verificar en
   `npx prisma studio` que se crean las 8 categorías por defecto.
 
-### 2. Dejar verde el E2E — ✅ hecho (sesión 2026-06-12)
+### 2. Dejar verde el E2E — ✅ hecho (auth: 2026-06-12 · compra: 2026-06-15)
 Corre en Docker contra la app de dev:
 ```bash
 docker compose run --rm --no-deps e2e
 ```
-La parte de auth pasa; el flujo de compra sigue en `test.skip` (habilitarlo es el
-próximo paso natural ahora que la UI existe).
+Auth y el **flujo de compra** (crear tarjeta → compra en 6 cuotas → calendario →
+marcar cuota pagada) pasan: ya no queda nada en `test.skip` (3/3 verde).
 
 ### 3. Decisiones chicas
 - ✅ **`middleware.ts` → `proxy.ts`**: migrado con el codemod oficial de Next 16.
@@ -226,14 +247,15 @@ El shell/auth/rutas y la **Fase 1 (tarjetas)** ya están listos. Para cerrar el 
 Las server actions de Card/Purchase (`src/server/actions/`) ya están listas para
 enganchar. A medida que existan las pantallas, sacar el `test.skip` del happy path.
 
-### 5. Entrega del MVP (Fases 5-6 del roadmap)
-- **Fase 5 — Testing + CI/CD**: dejar verde el E2E (ver pendiente 2) y montar el
-  pipeline de GitHub Actions.
-- **Fase 6 — Deploy**: **Vercel (app) + Neon (Postgres)**, serverless y $0 (decisión
-  del 2026-06-12; Docker queda solo para dev, VPS es opción a futuro). Paso a paso y
-  variables de entorno en `docs/ARCHITECTURE.md` → Deployment. Tareas: crear base en Neon,
-  conectar el repo a Vercel, cargar env vars, agregar `DIRECT_URL` + fallback en
-  `prisma.config.ts`, y poner el Build Command `prisma migrate deploy && next build`.
+### 5. Entrega del MVP (Fases 5-6 del roadmap) — ✅ hecho
+- **Fase 5 — Testing + CI/CD**: ✅ E2E happy path verde (pendiente 2) + pipeline de
+  GitHub Actions (`.github/workflows/ci.yml`) corriendo typecheck · lint · test · build
+  en push a main y PRs.
+- **Fase 6 — Deploy**: ✅ **vivo en producción** en Vercel (app) + Neon (Postgres). Neon
+  creado, repo conectado a Vercel (Root Directory = `personal-finance-app`), env vars
+  cargadas, Build Command `prisma migrate deploy && next build`. `prisma.config.ts` ya migra
+  contra `DIRECT_URL ?? DATABASE_URL`. Referencia: `docs/ARCHITECTURE.md` → Deployment.
+- Pendiente menor: confirmar que `BETTER_AUTH_SECRET` de prod sea uno propio (no el de dev).
 
 ### Opcionales / cosmético
 - Borrar los `public/*.svg` sin usar.
