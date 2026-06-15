@@ -299,6 +299,54 @@ Browser ──> Vercel (Next.js: RSC + Server Actions como funciones serverless)
   para usuarios AR: mover **ambos** a São Paulo —Vercel `gru1` + Neon `sa-east-1`—; nunca
   uno solo.)*
 
+### Mejora futura: Redis para rate limit (y caché de sesión)
+
+> **Estado: NO implementado.** Decisión deliberada para el MVP; se documenta acá el
+> porqué y el camino de upgrade.
+
+**El problema.** Para frenar fuerza bruta en el login hace falta un **contador
+compartido entre invocaciones** (cuántos intentos lleva una IP en una ventana). En
+serverless eso choca con el modelo: cada función es efímera y **no comparte memoria**,
+así que el store en memoria por defecto de Better Auth no es confiable entre instancias
+(una IP que cae en lambdas distintas puede saltear el límite).
+
+**Por qué hoy NO lo hacemos.** A escala de portfolio el riesgo es bajo y agregar Redis
+es **una dependencia más** (otra cuenta, otra var de entorno, otro punto de falla) —
+sobre-ingeniería para el MVP. El rate limit de Better Auth queda en su **default**
+(activo solo en producción, store en memoria): mitiga lo básico sin infra extra.
+
+**Por qué Redis sería la solución correcta cuando se justifique.** Redis es un store
+clave-valor **en memoria**, justo lo que pide el problema:
+
+- **TTL nativo (el mayor diferencial).** Cada clave se crea con tiempo de vida = la
+  ventana del límite, y Redis la borra sola. No hay tabla que crezca ni job de limpieza
+  (a diferencia de persistirlo en Postgres, que acumula filas sin expiración).
+- **Latencia sub-ms y sin tocar Neon.** La ruta de login deja de pagar `SELECT`+`UPDATE`
+  contra la DB de negocio ni competir por el pool de conexiones.
+- **Conteo atómico (`INCR`).** Incrementa y devuelve en un paso, sin la *race* del
+  patrón leer→sumar→escribir. *(Ojo: la interfaz genérica `secondaryStorage` de Better
+  Auth es `get`/`set`/`delete` y por defecto sigue siendo read-modify-write; la
+  atomicidad real exige un storage de rate limit a medida con `INCR` directo.)*
+- **Dominio de falla separado.** Un ataque ya no se traduce en escrituras a tu Postgres,
+  y un problema de la DB no arrastra al rate limit (ni al revés).
+
+**Qué Redis, en serverless.** No un Redis con conexión TCP persistente (incompatible con
+funciones efímeras), sino **Upstash Redis** o **Vercel KV** (Upstash por debajo): hablan
+por **HTTP/REST**, una request por invocación, sin pool que administrar. Es el equivalente
+de Neon para Postgres: un servicio serverless-friendly.
+
+**Cómo se enchufaría.** Better Auth tiene la opción `secondaryStorage` (`get`/`set`/
+`delete` contra Upstash). Al definirla, `rateLimit.storage` pasa a `"secondary-storage"`
+**automáticamente** (no hay que setearlo). **Bonus:** ese mismo `secondaryStorage`
+cachea las **sesiones**, de modo que la verificación de sesión deja de pegarle a Postgres
+en cada chequeo — baja la carga de DB de todo el subsistema de auth, no solo del rate
+limit.
+
+> Dónde brillaría: el día que la app tenga tráfico real, o para que el portfolio cuente
+> una historia de arquitectura más completa ("sesiones cacheadas + rate limit distribuido
+> en Redis serverless"). Es una decisión de producto/narrativa más que de necesidad
+> técnica inmediata.
+
 ### Variables de entorno en producción
 
 En Vercel → *Project Settings → Environment Variables* (marcadas para *Production*):

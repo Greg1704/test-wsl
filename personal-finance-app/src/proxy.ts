@@ -22,6 +22,10 @@ export const config = {
     "/dashboard/:path*",
     "/tarjetas",
     "/tarjetas/:path*",
+    "/compras",
+    "/compras/:path*",
+    "/calendario",
+    "/configuracion",
     "/simulador",
   ],
 };

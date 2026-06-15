@@ -14,6 +14,14 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  session: {
+    // La sesión vence a las 2h de su último refresco; `updateAge` evita escribir
+    // en la DB en cada request: solo "empuja" el expiresAt si la sesión tiene más
+    // de 1h. En la práctica, usándola al menos 1 vez por hora se renueva sola; con
+    // >2h de inactividad, el próximo acceso cae en /login.
+    expiresIn: 60 * 60 * 2, // 2 horas
+    updateAge: 60 * 60, //     1 hora
+  },
   user: {
     additionalFields: {
       defaultCurrency: {
