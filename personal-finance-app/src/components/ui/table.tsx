@@ -23,7 +23,12 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      // Fondo esmeralda sutil (token de marca) para distinguir el header de las filas
+      // de datos; sin el hover gris de TableRow, que si no lo pisaría al pasar el mouse.
+      className={cn(
+        "bg-primary/10 [&_tr]:border-b [&_tr]:hover:bg-transparent",
+        className
+      )}
       {...props}
     />
   )

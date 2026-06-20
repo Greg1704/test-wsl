@@ -32,12 +32,24 @@ async function setInstallmentStatus(id: string, data: Prisma.InstallmentUpdateIn
   revalidatePath(`/compras/${installment.purchaseId}`);
 }
 
-/** Marca una cuota como pagada, registrando la fecha de pago (RF-4.2). */
-export async function markInstallmentPaid(id: string) {
-  await setInstallmentStatus(id, { status: InstallmentStatus.PAID, paidAt: new Date() });
+/**
+ * Marca una cuota como pagada, registrando la fecha de pago (RF-4.2). `paidFromSavings`
+ * (default true) indica si la cuota se descontó del ahorro: el puente cuota↔ahorro lo
+ * usa `getSavingsOverview` para bajar el saldo real (ver src/server/lib/savings.ts).
+ */
+export async function markInstallmentPaid(id: string, paidFromSavings = true) {
+  await setInstallmentStatus(id, {
+    status: InstallmentStatus.PAID,
+    paidAt: new Date(),
+    paidFromSavings,
+  });
 }
 
-/** Revierte una cuota pagada a pendiente, limpiando la fecha de pago (RF-4.3). */
+/** Revierte una cuota pagada a pendiente, limpiando fecha de pago y el flag de ahorro. */
 export async function revertInstallment(id: string) {
-  await setInstallmentStatus(id, { status: InstallmentStatus.PENDING, paidAt: null });
+  await setInstallmentStatus(id, {
+    status: InstallmentStatus.PENDING,
+    paidAt: null,
+    paidFromSavings: false,
+  });
 }

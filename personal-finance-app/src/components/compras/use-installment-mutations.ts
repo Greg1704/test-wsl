@@ -32,7 +32,8 @@ export function useInstallmentMutations() {
 
   return {
     isPending,
-    markPaid: (id: string) => run(() => markInstallmentPaid(id), "Cuota marcada como pagada"),
+    markPaid: (id: string, paidFromSavings = true) =>
+      run(() => markInstallmentPaid(id, paidFromSavings), "Cuota marcada como pagada"),
     revert: (id: string) => run(() => revertInstallment(id), "Cuota revertida"),
   };
 }

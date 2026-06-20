@@ -8,20 +8,32 @@ import { requireUser } from "@/server/auth/session";
 import { cardSchema, renewCardSchema } from "@/lib/validation/card";
 import { parseExpiration, startOfToday } from "@/server/lib/dates";
 
-/** Tarjetas vigentes: activas y sin vencer. */
+/**
+ * Tarjetas vigentes: activas y sin vencer. El DÉBITO no tiene vencimiento, así que
+ * siempre cuenta como vigente; el crédito, solo si su `expirationDate` no pasó.
+ */
 export async function listActiveCards() {
   const user = await requireUser();
   return prisma.card.findMany({
-    where: { userId: user.id, isActive: true, expirationDate: { gte: startOfToday() } },
+    where: {
+      userId: user.id,
+      isActive: true,
+      OR: [{ type: "DEBIT" }, { expirationDate: { gte: startOfToday() } }],
+    },
     orderBy: { createdAt: "desc" },
   });
 }
 
-/** Tarjetas vencidas: siguen activas pero su fecha de vencimiento ya pasó. */
+/** Tarjetas vencidas: solo crédito (el débito no vence), activas y con fecha pasada. */
 export async function listExpiredCards() {
   const user = await requireUser();
   return prisma.card.findMany({
-    where: { userId: user.id, isActive: true, expirationDate: { lt: startOfToday() } },
+    where: {
+      userId: user.id,
+      isActive: true,
+      type: "CREDIT",
+      expirationDate: { lt: startOfToday() },
+    },
     orderBy: { expirationDate: "desc" },
   });
 }
@@ -39,14 +51,30 @@ export type CreateCardResult =
   | { status: "created"; card: Card }
   | { status: "duplicate"; existing: Card };
 
+/**
+ * Mapea los datos validados del form al `data` de Prisma. El DÉBITO no tiene ciclo de
+ * facturación ni vencimiento: esos campos se persisten como `null`. El crédito convierte
+ * el MM/AA a Date (fin de mes) y guarda cierre/vencimiento.
+ */
+function toCardData(parsed: ReturnType<typeof cardSchema.parse>) {
+  const { expiration, closingDay, dueDay, ...rest } = parsed;
+  const isCredit = parsed.type === "CREDIT";
+  return {
+    ...rest,
+    closingDay: isCredit ? closingDay : null,
+    dueDay: isCredit ? dueDay : null,
+    expirationDate: isCredit && expiration ? parseExpiration(expiration) : null,
+  };
+}
+
 export async function createCard(input: unknown, force = false): Promise<CreateCardResult> {
   const user = await requireUser();
-  const { expiration, ...data } = cardSchema.parse(input);
+  const parsed = cardSchema.parse(input);
 
   if (!force) {
     // Duplicado = mismo banco + últimos 4 (entre activas, vencidas y desactivadas).
     const existing = await prisma.card.findFirst({
-      where: { userId: user.id, bank: data.bank, last4: data.last4 },
+      where: { userId: user.id, bank: parsed.bank, last4: parsed.last4 },
     });
     if (existing) {
       return { status: "duplicate", existing };
@@ -55,7 +83,7 @@ export async function createCard(input: unknown, force = false): Promise<CreateC
 
   const card = await prisma.card.create({
     // El userId SIEMPRE viene de la sesión, nunca del input del cliente.
-    data: { ...data, expirationDate: parseExpiration(expiration), userId: user.id },
+    data: { ...toCardData(parsed), userId: user.id },
   });
 
   revalidatePath("/tarjetas");
@@ -77,12 +105,12 @@ export async function getCardById(id: string) {
 
 export async function updateCard(id: string, input: unknown) {
   const user = await requireUser();
-  const { expiration, ...data } = cardSchema.parse(input);
+  const parsed = cardSchema.parse(input);
 
   // updateMany filtra por userId: el usuario A no puede editar la tarjeta de B.
   const { count } = await prisma.card.updateMany({
     where: { id, userId: user.id },
-    data: { ...data, expirationDate: parseExpiration(expiration) },
+    data: toCardData(parsed),
   });
 
   if (count === 0) {

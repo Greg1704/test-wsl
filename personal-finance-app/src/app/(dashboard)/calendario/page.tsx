@@ -54,6 +54,8 @@ export default async function CalendarioPage({
         </p>
       </header>
 
+      {/* Panel de contenido: superficie `bg-card` para despegar del fondo de la página. */}
+      <div className="flex flex-col gap-6 rounded-xl border bg-card p-4 shadow-sm sm:p-6">
       <div className="flex items-center justify-between rounded-lg border px-2 py-1.5">
         <Button asChild variant="ghost" size="icon-sm">
           <Link href={`/calendario?month=${prevMonth}`} aria-label="Mes anterior">
@@ -146,7 +148,8 @@ export default async function CalendarioPage({
                             {inst.purchase.description}
                           </span>
                           <span className="text-muted-foreground hidden truncate sm:inline">
-                            {inst.purchase.card.name} ···· {inst.purchase.card.last4} ·{" "}
+                            {/* Las cuotas solo existen para crédito ⇒ siempre hay tarjeta. */}
+                            {inst.purchase.card!.name} ···· {inst.purchase.card!.last4} ·{" "}
                             {inst.installmentNumber}/{inst.purchase.totalInstallments}
                           </span>
                           <span className="ml-auto shrink-0 font-medium">
@@ -162,6 +165,7 @@ export default async function CalendarioPage({
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

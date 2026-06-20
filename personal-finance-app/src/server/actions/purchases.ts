@@ -18,13 +18,16 @@ import { generateInstallments, impliedMonthlyRate } from "@/server/lib/installme
 export async function createPurchase(input: unknown) {
   const user = await requireUser();
   const data = purchaseSchema.parse(input);
+  const isCredit = data.paymentMethod === "CREDIT";
+  const needsCard = isCredit || data.paymentMethod === "DEBIT";
 
-  // La tarjeta debe pertenecer al usuario de la sesión (autorización).
-  const card = await prisma.card.findFirst({
-    where: { id: data.cardId, userId: user.id },
-  });
-  if (!card) {
-    throw new Error("Tarjeta no encontrada");
+  // La tarjeta (crédito o débito) debe pertenecer al usuario y ser del tipo correcto.
+  let card = null;
+  if (needsCard) {
+    card = await prisma.card.findFirst({ where: { id: data.cardId, userId: user.id } });
+    if (!card) throw new Error("Tarjeta no encontrada");
+    const expectedType = isCredit ? "CREDIT" : "DEBIT";
+    if (card.type !== expectedType) throw new Error("Tipo de tarjeta inválido para el medio de pago");
   }
 
   // La categoría (si se asigna) también debe pertenecer al usuario: la FK de
@@ -39,20 +42,55 @@ export async function createPurchase(input: unknown) {
     }
   }
 
+  // La moneda la fija la tarjeta cuando hay (crédito/débito); para transferencia y
+  // efectivo, la que eligió el usuario en el form.
+  const currency = card?.currency ?? data.currency;
+  const originalCents = currencyToCents(data.totalAmount);
+
+  // GASTO NO-CRÉDITO (débito/transferencia/efectivo): pago único en `purchaseDate`,
+  // sin interés y SIN cuotas materializadas (no contamina el eje de cuotas; descuenta
+  // del ahorro vía getSavingsOverview). Ver docs/ARCHITECTURE.md.
+  if (!isCredit) {
+    const created = await prisma.purchase.create({
+      data: {
+        userId: user.id,
+        paymentMethod: data.paymentMethod,
+        cardId: card?.id ?? null,
+        categoryId: data.categoryId,
+        description: data.description,
+        merchant: data.merchant,
+        totalAmountCents: originalCents,
+        currency,
+        totalInstallments: 1,
+        purchaseDate: data.purchaseDate,
+        firstInstallmentDueDate: data.purchaseDate,
+        interestRateMonthly: null,
+        notes: data.notes,
+      },
+    });
+    revalidatePath("/dashboard");
+    revalidatePath("/compras");
+    return { id: created.id };
+  }
+
+  // COMPRA A CRÉDITO: las cuotas necesitan el ciclo de la tarjeta (no nulo en crédito).
+  if (card!.closingDay == null || card!.dueDay == null) {
+    throw new Error("La tarjeta de crédito no tiene ciclo de facturación configurado");
+  }
+
   // Monto original (lo que costó) vs. total financiado (con recargo). Si no se
   // informa recargo, son iguales = compra sin interés.
-  const originalCents = currencyToCents(data.totalAmount);
   const financedCents =
     data.financedTotal != null ? currencyToCents(data.financedTotal) : originalCents;
 
   // Las cuotas reparten SIEMPRE el total final.
   const rows = generateInstallments({
-    cardClosingDay: card.closingDay,
-    cardDueDay: card.dueDay,
+    cardClosingDay: card!.closingDay,
+    cardDueDay: card!.dueDay,
     purchaseDate: data.purchaseDate,
     totalInstallments: data.totalInstallments,
     totalAmountCents: financedCents,
-    currency: data.currency,
+    currency,
   });
 
   // TEM derivada del recargo (solo para mostrar). null si no hay recargo.
@@ -66,12 +104,13 @@ export async function createPurchase(input: unknown) {
     const created = await tx.purchase.create({
       data: {
         userId: user.id,
-        cardId: data.cardId,
+        paymentMethod: "CREDIT",
+        cardId: card!.id,
         categoryId: data.categoryId,
         description: data.description,
         merchant: data.merchant,
         totalAmountCents: originalCents,
-        currency: data.currency,
+        currency,
         totalInstallments: data.totalInstallments,
         purchaseDate: data.purchaseDate,
         firstInstallmentDueDate: rows[0].dueDate,
@@ -94,13 +133,18 @@ export async function createPurchase(input: unknown) {
   return { id: purchase.id };
 }
 
+/** Cantidad de compras por página en el listado (RF-3.8). */
+const PURCHASES_PAGE_SIZE = 15;
+
 /**
- * Listado de compras del usuario con filtros opcionales (RF-3.8).
- * El `userId` SIEMPRE proviene de la sesión; "mes" filtra por `purchaseDate`.
+ * Listado de compras del usuario con filtros opcionales y paginación (RF-3.8).
+ * El `userId` SIEMPRE proviene de la sesión; "mes" filtra por `purchaseDate`. Devuelve
+ * la página pedida (15 filas) más el total para los controles de paginación.
  */
 export async function listPurchases(filters: unknown = {}) {
   const user = await requireUser();
-  const { cardId, categoryId, currency, month } = purchaseFiltersSchema.parse(filters);
+  const { cardId, categoryId, currency, paymentMethod, month, page } =
+    purchaseFiltersSchema.parse(filters);
 
   const where: Prisma.PurchaseWhereInput = { userId: user.id };
   if (cardId) where.cardId = cardId;
@@ -108,18 +152,29 @@ export async function listPurchases(filters: unknown = {}) {
   if (categoryId === NO_CATEGORY_FILTER) where.categoryId = null;
   else if (categoryId) where.categoryId = categoryId;
   if (currency) where.currency = currency;
+  if (paymentMethod) where.paymentMethod = paymentMethod;
   // Rango del mes con borde superior exclusivo (TZ-safe). Ver monthRange.
   if (month) where.purchaseDate = monthRange(month);
 
-  return prisma.purchase.findMany({
+  // Cuenta total (para la paginación) y la página pedida, en paralelo. Si la página
+  // queda fuera de rango, se clampa a la última con resultados.
+  const total = await prisma.purchase.count({ where });
+  const pageCount = Math.max(1, Math.ceil(total / PURCHASES_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page ?? 1), pageCount);
+
+  const purchases = await prisma.purchase.findMany({
     where,
     orderBy: { purchaseDate: "desc" },
+    skip: (currentPage - 1) * PURCHASES_PAGE_SIZE,
+    take: PURCHASES_PAGE_SIZE,
     include: {
       card: { select: { id: true, name: true, bank: true, last4: true } },
       category: { select: { id: true, name: true, color: true } },
       _count: { select: { installments: true } },
     },
   });
+
+  return { purchases, total, page: currentPage, pageCount };
 }
 
 /**

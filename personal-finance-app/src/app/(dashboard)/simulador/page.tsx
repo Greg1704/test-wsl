@@ -25,9 +25,11 @@ export default async function SimuladorPage() {
   await requireUser();
   const now = new Date();
 
-  const cardRows = await listActiveCards();
+  // El simulador proyecta planes de CUOTAS → solo tarjetas de crédito (las de débito
+  // no tienen ciclo ni cuotas que simular).
+  const cardRows = (await listActiveCards()).filter((c) => c.type === "CREDIT");
 
-  // Sin tarjetas no hay nada que simular: empujamos a crear una (RF-2).
+  // Sin tarjetas de crédito no hay nada que simular: empujamos a crear una (RF-2).
   if (cardRows.length === 0) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-8">
@@ -68,8 +70,9 @@ export default async function SimuladorPage() {
     bank: c.bank,
     last4: c.last4,
     currency: c.currency,
-    closingDay: c.closingDay,
-    dueDay: c.dueDay,
+    // Filtradas a crédito arriba ⇒ ciclo no nulo.
+    closingDay: c.closingDay!,
+    dueDay: c.dueDay!,
   }));
 
   // Labels de los meses del horizonte (mismos índices que buildProjection).

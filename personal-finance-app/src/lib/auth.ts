@@ -28,10 +28,6 @@ export const auth = betterAuth({
         type: "string",
         defaultValue: "ARS",
       },
-      monthlyIncomeCents: {
-        type: "number",
-        defaultValue: 0,
-      },
     },
   },
   databaseHooks: {

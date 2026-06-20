@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { cardSchema } from "./card";
 
 const base = {
+  type: "CREDIT" as const,
   name: "Visa Galicia",
   bank: "Galicia",
   last4: "1234",

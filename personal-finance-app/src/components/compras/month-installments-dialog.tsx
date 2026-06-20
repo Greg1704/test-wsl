@@ -48,7 +48,7 @@ export function MonthInstallmentsDialog({
   installments: MonthInstallmentView[];
 }) {
   const [open, setOpen] = useState(false);
-  const { isPending, markPaid, revert } = useInstallmentMutations();
+  const mutations = useInstallmentMutations();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -60,53 +60,71 @@ export function MonthInstallmentsDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="capitalize">Cuotas de {monthLabel}</DialogTitle>
-          <DialogDescription>Marcá las cuotas que ya pagaste.</DialogDescription>
+          <DialogDescription>
+            Marcá las cuotas que ya pagaste. Por defecto se descuentan de tu ahorro.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid max-h-[60vh] gap-2 overflow-y-auto">
-          {installments.map((inst) => {
-            const meta = INSTALLMENT_STATUS_META[inst.status];
-            const isPaid = inst.status === "PAID";
-            return (
-              <div
-                key={inst.id}
-                className="flex items-center gap-3 rounded-md border px-3 py-2 text-sm"
-              >
-                <div className="grid min-w-0">
-                  <span className="truncate font-medium">{inst.description}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {inst.cardName} ···· {inst.cardLast4} · {inst.installmentNumber}/
-                    {inst.totalInstallments} · vence {inst.dueDate}
-                  </span>
-                </div>
-                <Badge variant={meta.variant} className={cn("ml-auto", meta.className)}>
-                  {meta.label}
-                </Badge>
-                <span className="font-medium whitespace-nowrap">{inst.amount}</span>
-                {isPaid ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={isPending}
-                    onClick={() => revert(inst.id)}
-                  >
-                    Revertir
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isPending}
-                    onClick={() => markPaid(inst.id)}
-                  >
-                    Marcar paga
-                  </Button>
-                )}
-              </div>
-            );
-          })}
+          {installments.map((inst) => (
+            <MonthInstallmentRow key={inst.id} inst={inst} mutations={mutations} />
+          ))}
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MonthInstallmentRow({
+  inst,
+  mutations,
+}: {
+  inst: MonthInstallmentView;
+  mutations: ReturnType<typeof useInstallmentMutations>;
+}) {
+  const { isPending, markPaid, revert } = mutations;
+  const meta = INSTALLMENT_STATUS_META[inst.status];
+  const isPaid = inst.status === "PAID";
+  const [fromSavings, setFromSavings] = useState(true);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm">
+      <div className="grid min-w-0">
+        <span className="truncate font-medium">{inst.description}</span>
+        <span className="text-muted-foreground text-xs">
+          {inst.cardName} ···· {inst.cardLast4} · {inst.installmentNumber}/
+          {inst.totalInstallments} · vence {inst.dueDate}
+        </span>
+      </div>
+      <Badge variant={meta.variant} className={cn("ml-auto", meta.className)}>
+        {meta.label}
+      </Badge>
+      <span className="font-medium whitespace-nowrap">{inst.amount}</span>
+      {isPaid ? (
+        <Button variant="ghost" size="sm" disabled={isPending} onClick={() => revert(inst.id)}>
+          Revertir
+        </Button>
+      ) : (
+        <div className="flex items-center gap-2">
+          <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <input
+              type="checkbox"
+              className="accent-primary size-3.5"
+              checked={fromSavings}
+              onChange={(e) => setFromSavings(e.target.checked)}
+            />
+            De ahorros
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending}
+            onClick={() => markPaid(inst.id, fromSavings)}
+          >
+            Marcar paga
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

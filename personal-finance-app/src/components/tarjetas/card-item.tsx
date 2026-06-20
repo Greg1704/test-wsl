@@ -41,10 +41,16 @@ export function CardItem({ card }: { card: CardModel }) {
           </span>
         </div>
         {card.owner && <p>Dueño: {card.owner}</p>}
-        <p>
-          Cierre día {card.closingDay} · Vence día {card.dueDay}
-        </p>
-        <p>Vto. tarjeta: {formatExpiration(card.expirationDate)}</p>
+        {card.type === "DEBIT" ? (
+          <p>Débito · gasta contra tu saldo al instante</p>
+        ) : (
+          <>
+            <p>
+              Cierre día {card.closingDay} · Vence día {card.dueDay}
+            </p>
+            <p>Vto. tarjeta: {formatExpiration(card.expirationDate)}</p>
+          </>
+        )}
       </CardContent>
 
       <CardFooter className="gap-2">
