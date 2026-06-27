@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/server/db";
@@ -74,5 +75,22 @@ export async function updateSavingsBalance(input: unknown) {
   if (data.savingsUsd != null) await upsert("USD", currencyToCents(data.savingsUsd));
 
   revalidatePath("/dashboard");
+  revalidatePath("/configuracion");
+}
+
+/**
+ * Activa/desactiva el opt-in al mail mensual de deudas (`User.monthlyReportEnabled`).
+ * El `userId` SIEMPRE viene de la sesión (nunca del cliente). Lo lee el cron
+ * `/api/cron/monthly-report` para decidir a quién mandarle el reporte.
+ */
+export async function setMonthlyReportEnabled(input: unknown) {
+  const user = await requireUser();
+  const enabled = z.boolean().parse(input);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { monthlyReportEnabled: enabled },
+  });
+
   revalidatePath("/configuracion");
 }

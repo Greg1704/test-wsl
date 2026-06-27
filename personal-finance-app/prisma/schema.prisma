@@ -14,6 +14,9 @@ model User {
   emailVerified   Boolean  @default(false)
   image           String?
   defaultCurrency String   @default("ARS")
+  // Opt-in al mail mensual de deudas (RF de mails). Default false: solo lo recibe
+  // quien lo activa en Configuración. Lo dispara el cron /api/cron/monthly-report.
+  monthlyReportEnabled Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

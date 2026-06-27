@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "@/server/db";
 import { createDefaultCategoriesFor } from "@/server/lib/categories";
+import { sendResetPasswordEmail } from "@/server/email/send";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -13,6 +14,14 @@ export const auth = betterAuth({
   trustedOrigins: process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [],
   emailAndPassword: {
     enabled: true,
+    // Recuperación de contraseña por link de un solo uso (RF de mails). Better Auth
+    // genera el token y arma la `url` apuntando al `redirectTo` que pide el cliente
+    // (/reset-password); acá solo mandamos el mail.
+    sendResetPassword: async ({ user, url }) => {
+      await sendResetPasswordEmail({ to: user.email, url });
+    },
+    // El token de reset vence en 1 hora (coincide con el texto del mail).
+    resetPasswordTokenExpiresIn: 60 * 60,
   },
   session: {
     // La sesión vence a las 2h de su último refresco; `updateAge` evita escribir
@@ -27,6 +36,12 @@ export const auth = betterAuth({
       defaultCurrency: {
         type: "string",
         defaultValue: "ARS",
+      },
+      monthlyReportEnabled: {
+        type: "boolean",
+        defaultValue: false,
+        // No se setea en el signup; se cambia desde Configuración (settings action).
+        input: false,
       },
     },
   },

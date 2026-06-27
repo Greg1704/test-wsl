@@ -5,6 +5,7 @@ import { incomeForMonth } from "@/server/lib/savings";
 import { startOfMonth } from "@/server/lib/dates";
 import { IncomeForm } from "@/components/configuracion/income-form";
 import { SavingsForm } from "@/components/configuracion/savings-form";
+import { NotificationsForm } from "@/components/configuracion/notifications-form";
 import { Separator } from "@/components/ui/separator";
 
 /** Ingreso vigente del mes actual para una moneda, en unidades (number) o undefined. */
@@ -26,7 +27,7 @@ export default async function ConfiguracionPage() {
   const [profile, incomeRows, savingsRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
-      select: { defaultCurrency: true },
+      select: { defaultCurrency: true, monthlyReportEnabled: true },
     }),
     prisma.incomeEntry.findMany({
       where: { userId: user.id },
@@ -74,6 +75,18 @@ export default async function ConfiguracionPage() {
           </p>
         </div>
         <SavingsForm initial={savingsInitial} />
+      </section>
+
+      <Separator />
+
+      <section className="grid gap-4">
+        <div>
+          <h2 className="text-lg font-medium tracking-tight">Notificaciones</h2>
+          <p className="text-muted-foreground text-sm">
+            Recordatorios por mail sobre tus cuotas.
+          </p>
+        </div>
+        <NotificationsForm initialEnabled={profile?.monthlyReportEnabled ?? false} />
       </section>
     </div>
   );
