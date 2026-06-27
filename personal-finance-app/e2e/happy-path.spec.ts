@@ -101,7 +101,7 @@ test.describe("compra en cuotas (RNF-6.3, parte 2)", () => {
     await purchaseDialog.getByLabel("Descripción").fill(description);
     await purchaseDialog.getByLabel("Monto total").fill("60000");
     await selectOption(page, "Cuotas", "6");
-    await purchaseDialog.getByRole("button", { name: "Registrar compra" }).click();
+    await purchaseDialog.getByRole("button", { name: "Registrar" }).click();
     await expect(purchaseDialog).toBeHidden();
     await expect(page.getByRole("link", { name: description })).toBeVisible();
 
@@ -132,5 +132,40 @@ test.describe("compra en cuotas (RNF-6.3, parte 2)", () => {
     await expect(page.getByText("1/6 pagas")).toBeVisible();
     // La fila pagada ahora ofrece revertir (toggle de estado).
     await expect(page.getByRole("button", { name: "Revertir" }).first()).toBeVisible();
+  });
+});
+
+test.describe("gasto no-crédito (ahorros)", () => {
+  test("efectivo: aparece en compras y NO en el calendario de cuotas", async ({ page }) => {
+    const stamp = Date.now();
+    const description = `Feria E2E ${stamp}`;
+
+    await signup(page, "QA Gasto");
+
+    // Registrar un gasto en efectivo (sin tarjeta, pago único, descuenta del ahorro).
+    await page.goto("/compras");
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "+ Nueva compra" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await selectOption(page, "Medio de pago", "Efectivo");
+    await dialog.getByLabel("Descripción").fill(description);
+    await dialog.getByLabel("Monto total").fill("15000");
+    await dialog.getByRole("button", { name: "Registrar" }).click();
+    await expect(dialog).toBeHidden();
+
+    // Aparece en el historial de compras, con "Efectivo" como origen (sin tarjeta).
+    await expect(page.getByRole("link", { name: description })).toBeVisible();
+    await expect(page.getByText("Efectivo").first()).toBeVisible();
+
+    // NO genera cuotas: no debe aparecer en el calendario de ningún mes próximo.
+    const now = new Date();
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      await page.goto(`/calendario?month=${ym}`);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByText(description)).toHaveCount(0);
+    }
   });
 });

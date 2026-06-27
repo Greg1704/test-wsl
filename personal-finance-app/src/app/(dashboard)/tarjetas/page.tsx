@@ -87,7 +87,8 @@ export default async function TarjetasPage() {
                           name: card.name,
                           bank: card.bank,
                           last4: card.last4,
-                          expirationDate: card.expirationDate,
+                          // Las vencidas son siempre de crédito → expirationDate no es null.
+                          expirationDate: card.expirationDate!,
                         }}
                         trigger={
                           <Button variant="outline" size="sm">

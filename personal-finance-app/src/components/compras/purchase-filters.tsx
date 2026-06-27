@@ -22,8 +22,17 @@ export type PurchaseFilterValues = {
   cardId?: string;
   categoryId?: string;
   currency?: string;
+  paymentMethod?: string;
   month?: string; // "YYYY-MM"
 };
+
+/** Opciones del filtro de medio de pago (mismo orden que el form de compra). */
+const PAYMENT_METHOD_OPTIONS: { value: string; label: string }[] = [
+  { value: "CREDIT", label: "Crédito" },
+  { value: "DEBIT", label: "Débito" },
+  { value: "TRANSFER", label: "Transferencia" },
+  { value: "CASH", label: "Efectivo" },
+];
 
 export function PurchaseFilters({
   cards,
@@ -41,13 +50,18 @@ export function PurchaseFilters({
     if (next.cardId) params.set("cardId", next.cardId);
     if (next.categoryId) params.set("categoryId", next.categoryId);
     if (next.currency) params.set("currency", next.currency);
+    if (next.paymentMethod) params.set("paymentMethod", next.paymentMethod);
     if (next.month) params.set("month", next.month);
     const qs = params.toString();
     router.push(qs ? `/compras?${qs}` : "/compras");
   }
 
   const hasFilters = Boolean(
-    current.cardId || current.categoryId || current.currency || current.month
+    current.cardId ||
+      current.categoryId ||
+      current.currency ||
+      current.paymentMethod ||
+      current.month
   );
 
   return (
@@ -112,6 +126,28 @@ export function PurchaseFilters({
             <SelectItem value={ALL}>Todas</SelectItem>
             <SelectItem value="ARS">ARS</SelectItem>
             <SelectItem value="USD">USD</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-1.5">
+        <label className="text-muted-foreground text-xs">Medio de pago</label>
+        <Select
+          value={current.paymentMethod ?? ALL}
+          onValueChange={(v) =>
+            apply({ ...current, paymentMethod: v === ALL ? undefined : v })
+          }
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todos</SelectItem>
+            {PAYMENT_METHOD_OPTIONS.map((m) => (
+              <SelectItem key={m.value} value={m.value}>
+                {m.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

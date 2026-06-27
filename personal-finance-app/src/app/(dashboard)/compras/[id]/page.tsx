@@ -7,6 +7,7 @@ import { listCategories } from "@/server/actions/categories";
 import { formatMoney } from "@/server/lib/money";
 import { formatDate } from "@/server/lib/dates";
 import { computeDisplayStatus } from "@/server/lib/installment-status";
+import { purchaseSourceLabel, paymentMethodLabel } from "@/lib/payment-method";
 import { Button } from "@/components/ui/button";
 import {
   InstallmentList,
@@ -41,6 +42,8 @@ export default async function PurchaseDetailPage({
   }));
 
   const paidCount = installments.filter((i) => i.status === "PAID").length;
+  // El crédito genera cuotas; el resto (débito/transferencia/efectivo) es pago único.
+  const isCredit = purchase.paymentMethod === "CREDIT";
 
   // El total financiado = suma de las cuotas (que reparten el total con recargo).
   // El recargo se deriva contra el monto original; la TEM la guardamos al crear.
@@ -67,7 +70,8 @@ export default async function PurchaseDetailPage({
             {purchase.description}
           </h1>
           <p className="text-muted-foreground text-sm">
-            {purchase.card.name} ···· {purchase.card.last4} ·{" "}
+            {purchaseSourceLabel(purchase.paymentMethod, purchase.card)}
+            {purchase.card && <> ···· {purchase.card.last4}</>} ·{" "}
             {formatDate(purchase.purchaseDate)}
             {purchase.category && <> · {purchase.category.name}</>}
             {purchase.merchant && <> · {purchase.merchant}</>}
@@ -93,36 +97,59 @@ export default async function PurchaseDetailPage({
         </div>
       </header>
 
-      <section className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3">
-        <div>
-          <p className="text-muted-foreground text-xs">
-            {hasSurcharge ? "Monto original" : "Monto total"}
-          </p>
-          <p className="text-lg font-semibold">
-            {formatMoney(purchase.totalAmountCents, purchase.currency)}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs">Total a pagar</p>
-          <p className="text-lg font-semibold">
-            {formatMoney(financedCents, purchase.currency)}
-          </p>
-          {hasSurcharge && (
+      {isCredit ? (
+        <section className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3">
+          <div>
             <p className="text-muted-foreground text-xs">
-              Recargo +{surchargePct.toFixed(1)}%
-              {purchase.interestRateMonthly
-                ? ` · TEM ≈ ${Number(purchase.interestRateMonthly).toFixed(1)}%/mes`
-                : ""}
+              {hasSurcharge ? "Monto original" : "Monto total"}
             </p>
-          )}
-        </div>
-        <div>
-          <p className="text-muted-foreground text-xs">Cuotas</p>
-          <p className="text-lg font-semibold">
-            {paidCount}/{purchase.totalInstallments} pagas
-          </p>
-        </div>
-      </section>
+            <p className="text-lg font-semibold">
+              {formatMoney(purchase.totalAmountCents, purchase.currency)}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Total a pagar</p>
+            <p className="text-lg font-semibold">
+              {formatMoney(financedCents, purchase.currency)}
+            </p>
+            {hasSurcharge && (
+              <p className="text-muted-foreground text-xs">
+                Recargo +{surchargePct.toFixed(1)}%
+                {purchase.interestRateMonthly
+                  ? ` · TEM ≈ ${Number(purchase.interestRateMonthly).toFixed(1)}%/mes`
+                  : ""}
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Cuotas</p>
+            <p className="text-lg font-semibold">
+              {paidCount}/{purchase.totalInstallments} pagas
+            </p>
+          </div>
+        </section>
+      ) : (
+        // Pago único (débito/transferencia/efectivo): sin cuotas, descuenta del ahorro.
+        <section className="grid gap-3 rounded-xl border p-4 sm:grid-cols-3">
+          <div>
+            <p className="text-muted-foreground text-xs">Monto</p>
+            <p className="text-lg font-semibold">
+              {formatMoney(purchase.totalAmountCents, purchase.currency)}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Medio de pago</p>
+            <p className="text-lg font-semibold">
+              {paymentMethodLabel(purchase.paymentMethod)}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Tipo</p>
+            <p className="text-lg font-semibold">Pago único</p>
+            <p className="text-muted-foreground text-xs">Descontado de tus ahorros</p>
+          </div>
+        </section>
+      )}
 
       {purchase.notes && (
         <p className="text-muted-foreground text-sm">
@@ -130,13 +157,12 @@ export default async function PurchaseDetailPage({
         </p>
       )}
 
-      <section className="grid gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Cuotas</h2>
-        <InstallmentList
-          installments={installments}
-          total={purchase.totalInstallments}
-        />
-      </section>
+      {isCredit && (
+        <section className="grid gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">Cuotas</h2>
+          <InstallmentList installments={installments} total={purchase.totalInstallments} />
+        </section>
+      )}
     </div>
   );
 }

@@ -8,22 +8,26 @@ datasource db {
 }
 
 model User {
-  id                 String         @id @default(cuid())
-  email              String         @unique
-  name               String?
-  emailVerified      Boolean        @default(false)
-  image              String?
-  defaultCurrency    String         @default("ARS")
-  monthlyIncomeCents BigInt         @default(0)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  emailVerified   Boolean  @default(false)
+  image           String?
+  defaultCurrency String   @default("ARS")
+  // Opt-in al mail mensual de deudas (RF de mails). Default false: solo lo recibe
+  // quien lo activa en Configuración. Lo dispara el cron /api/cron/monthly-report.
+  monthlyReportEnabled Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  sessions   Session[]
-  accounts   Account[]
-  cards      Card[]
-  purchases  Purchase[]
-  categories Category[]
-  rates      ExchangeRate[]
+  sessions        Session[]
+  accounts        Account[]
+  cards           Card[]
+  purchases       Purchase[]
+  categories      Category[]
+  rates           ExchangeRate[]
+  incomeEntries   IncomeEntry[]
+  savingsBalances SavingsBalance[]
 }
 
 model Session {
@@ -71,19 +75,22 @@ model Verification {
 }
 
 model Card {
-  id         String    @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
+  type           CardType  @default(CREDIT) // crédito (con ciclo de facturación) o débito
   name           String    // nombre identificatorio de la tarjeta ("Tarjeta principal")
   owner          String?   // dueño de la tarjeta (para tarjetas ajenas que se deben pagar)
   bank           String    // banco emisor ("Galicia", "Santander"… o nombre libre)
   brand          String?
   last4          String    // últimos 4 dígitos (obligatorio)
-  expirationDate DateTime  @db.Date  // vencimiento de la tarjeta (fin del mes MM/AA)
-  closingDay     Int
-  dueDay         Int
-  currency   String    @default("ARS")
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
+  // El ciclo de facturación y el vencimiento solo aplican a tarjetas de CRÉDITO:
+  // el débito gasta contra el saldo al instante (sin cierre/vencimiento). Nullables.
+  expirationDate DateTime? @db.Date // vencimiento de la tarjeta (fin del mes MM/AA)
+  closingDay     Int?
+  dueDay         Int?
+  currency       String    @default("ARS")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   purchases Purchase[]
@@ -91,29 +98,45 @@ model Card {
   @@index([userId])
 }
 
+enum CardType {
+  CREDIT
+  DEBIT
+}
+
 model Purchase {
-  id                      String   @id @default(cuid())
+  id                      String        @id @default(cuid())
   userId                  String
-  cardId                  String
+  // CREDIT genera cuotas (Installment); DEBIT/TRANSFER/CASH son pago único que
+  // descuenta del ahorro y NO materializa cuotas (ver docs/ARCHITECTURE.md).
+  paymentMethod           PaymentMethod @default(CREDIT)
+  cardId                  String? // nulo para transferencia/efectivo (no hay tarjeta)
   categoryId              String?
   description             String
   merchant                String?
   totalAmountCents        BigInt
-  currency                String   @default("ARS")
+  currency                String        @default("ARS")
   totalInstallments       Int
-  purchaseDate            DateTime @db.Date
-  firstInstallmentDueDate DateTime @db.Date
-  interestRateMonthly     Decimal? @db.Decimal(8, 4)
+  purchaseDate            DateTime      @db.Date
+  firstInstallmentDueDate DateTime      @db.Date
+  interestRateMonthly     Decimal?      @db.Decimal(8, 4)
   notes                   String?
-  createdAt               DateTime @default(now())
+  createdAt               DateTime      @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  card         Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  card         Card?         @relation(fields: [cardId], references: [id], onDelete: Cascade)
   category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   installments Installment[]
 
   @@index([userId])
   @@index([cardId])
+  @@index([userId, paymentMethod])
+}
+
+enum PaymentMethod {
+  CREDIT
+  DEBIT
+  TRANSFER
+  CASH
 }
 
 model Installment {
@@ -124,6 +147,9 @@ model Installment {
   amountCents       BigInt
   currency          String            @default("ARS")
   status            InstallmentStatus @default(PENDING)
+  // Al marcar PAID, indica si esta cuota se descontó del ahorro (puente cuota↔ahorro,
+  // RF-ahorros). Solo relevante para cuotas de crédito pagadas.
+  paidFromSavings   Boolean           @default(false)
   paidAt            DateTime?
   createdAt         DateTime          @default(now())
 
@@ -164,4 +190,36 @@ model ExchangeRate {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Ingreso mensual fechado por vigencia, por moneda. El ingreso de un mes es la
+/// entrada con mayor `validFrom <= mes`: cambiarlo inserta una entrada nueva con
+/// `validFrom` = mes actual, y los meses pasados conservan su valor automáticamente.
+model IncomeEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  currency    String // "ARS" | "USD"
+  amountCents BigInt
+  validFrom   DateTime @db.Date // primer día del mes desde el que aplica
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, currency, validFrom])
+}
+
+/// Ancla del ahorro por moneda: saldo declarado por el usuario a una fecha. El saldo
+/// real de cualquier mes se computa al leer (ancla + ingresos − gastos no-crédito −
+/// cuotas pagadas-desde-ahorros); no es una columna mutable. Ver src/server/lib/savings.ts.
+model SavingsBalance {
+  id          String   @id @default(cuid())
+  userId      String
+  currency    String
+  amountCents BigInt // saldo declarado a la fecha `asOf`
+  asOf        DateTime @db.Date // primer día del mes del saldo declarado
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, currency])
 }

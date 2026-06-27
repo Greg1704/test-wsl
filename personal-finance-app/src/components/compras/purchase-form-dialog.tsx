@@ -56,7 +56,7 @@ const NO_CATEGORY = "__none__";
 // en la página, el serializador de Next (dev) deja de renderizar algunas.
 export type PurchaseFormCard = Pick<
   Card,
-  "id" | "name" | "bank" | "last4" | "currency" | "closingDay" | "dueDay"
+  "id" | "type" | "name" | "bank" | "last4" | "currency" | "closingDay" | "dueDay"
 >;
 export type PurchaseFormCategory = Pick<Category, "id" | "name">;
 
@@ -69,8 +69,12 @@ type Props = {
 export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
   const [open, setOpen] = useState(false);
 
+  const creditCards = cards.filter((c) => c.type === "CREDIT");
+  const debitCards = cards.filter((c) => c.type === "DEBIT");
+
   const defaultValues: PurchaseFormValues = {
-    cardId: "",
+    paymentMethod: "CREDIT",
+    cardId: undefined,
     categoryId: undefined,
     description: "",
     merchant: "",
@@ -87,16 +91,33 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
     defaultValues,
   });
 
-  // La compra hereda la moneda de la tarjeta elegida.
+  const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" });
+  const isCredit = paymentMethod === "CREDIT";
+  const needsCard = paymentMethod === "CREDIT" || paymentMethod === "DEBIT";
+  const methodCards = paymentMethod === "DEBIT" ? debitCards : creditCards;
+
+  // Al cambiar de medio de pago, limpiamos lo que no aplica: tarjeta, cuotas (pago
+  // único) y recargo. Transferencia/efectivo no heredan moneda de una tarjeta.
+  function onPaymentMethodChange(value: string) {
+    form.setValue("paymentMethod", value as PurchaseFormValues["paymentMethod"]);
+    form.setValue("cardId", undefined);
+    if (value !== "CREDIT") {
+      form.setValue("totalInstallments", 1);
+      form.setValue("financedTotal", undefined);
+    }
+    if (value === "TRANSFER" || value === "CASH") {
+      form.setValue("currency", "ARS");
+    }
+  }
+
+  // La compra hereda la moneda de la tarjeta elegida (crédito/débito).
   function onCardChange(cardId: string) {
     form.setValue("cardId", cardId);
     const card = cards.find((c) => c.id === cardId);
     if (card) form.setValue("currency", card.currency as "ARS" | "USD");
   }
 
-  // Preview en vivo de las cuotas (reusa la lógica pura de dominio, sin tocar la
-  // DB). Es un adelanto del simulador de la Fase 4. Usamos `useWatch` por campo
-  // (no `form.watch()`) para suscribirnos de forma reactiva con deps estables.
+  // Preview en vivo de las cuotas (solo crédito). Reusa la lógica pura de dominio.
   const cardId = useWatch({ control: form.control, name: "cardId" });
   const totalAmount = useWatch({ control: form.control, name: "totalAmount" });
   const totalInstallments = useWatch({ control: form.control, name: "totalInstallments" });
@@ -104,10 +125,11 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
   const purchaseDate = useWatch({ control: form.control, name: "purchaseDate" });
 
   const preview = useMemo(() => {
-    const card = cards.find((c) => c.id === cardId);
-    if (!card || !totalAmount || totalAmount <= 0) return null;
+    if (!isCredit) return null;
+    const card = creditCards.find((c) => c.id === cardId);
+    if (!card || card.closingDay == null || card.dueDay == null) return null;
+    if (!totalAmount || totalAmount <= 0) return null;
     try {
-      // Misma lógica pura que usa el simulador (Fase 4): una sola fuente de verdad.
       const plan = buildPurchasePlan({
         cardClosingDay: card.closingDay,
         cardDueDay: card.dueDay,
@@ -121,25 +143,27 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
     } catch {
       return null;
     }
-  }, [cards, cardId, totalAmount, totalInstallments, financedTotal, purchaseDate]);
+  }, [isCredit, creditCards, cardId, totalAmount, totalInstallments, financedTotal, purchaseDate]);
 
   async function onSubmit(raw: PurchaseFormValues) {
     // Los opcionales vacíos se mandan como undefined (no como "").
     const payload: PurchaseFormValues = {
       ...raw,
+      cardId: raw.cardId || undefined,
       merchant: raw.merchant || undefined,
       notes: raw.notes || undefined,
       categoryId: raw.categoryId || undefined,
-      financedTotal: raw.financedTotal || undefined,
+      financedTotal: raw.paymentMethod === "CREDIT" ? raw.financedTotal || undefined : undefined,
+      totalInstallments: raw.paymentMethod === "CREDIT" ? raw.totalInstallments : 1,
     };
 
     try {
       await createPurchase(payload);
-      toast.success("Compra registrada");
+      toast.success(isCredit ? "Compra registrada" : "Gasto registrado");
       form.reset(defaultValues);
       setOpen(false);
     } catch {
-      toast.error("No pudimos registrar la compra. Intentá de nuevo.");
+      toast.error("No pudimos registrar el movimiento. Intentá de nuevo.");
     }
   }
 
@@ -155,10 +179,11 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nueva compra</DialogTitle>
+          <DialogTitle>Nuevo movimiento</DialogTitle>
           <DialogDescription>
-            Registrá una compra en cuotas; calculamos los vencimientos según el ciclo
-            de la tarjeta.
+            {isCredit
+              ? "Compra en cuotas: calculamos los vencimientos según el ciclo de la tarjeta."
+              : "Gasto de pago único: se descuenta de tus ahorros."}
           </DialogDescription>
         </DialogHeader>
 
@@ -166,28 +191,61 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
             <FormField
               control={form.control}
-              name="cardId"
+              name="paymentMethod"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tarjeta</FormLabel>
-                  <Select value={field.value || undefined} onValueChange={onCardChange}>
+                  <FormLabel>Medio de pago</FormLabel>
+                  <Select value={field.value} onValueChange={onPaymentMethodChange}>
                     <FormControl>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Elegí una tarjeta…" />
+                        <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {cards.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} · {c.bank} ···· {c.last4} ({c.currency})
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="CREDIT">Crédito (en cuotas)</SelectItem>
+                      <SelectItem value="DEBIT">Débito</SelectItem>
+                      <SelectItem value="TRANSFER">Transferencia</SelectItem>
+                      <SelectItem value="CASH">Efectivo</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {needsCard && (
+              <FormField
+                control={form.control}
+                name="cardId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tarjeta</FormLabel>
+                    {methodCards.length === 0 ? (
+                      <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-sm">
+                        No tenés tarjetas de {paymentMethod === "DEBIT" ? "débito" : "crédito"}.
+                        Agregá una en Tarjetas.
+                      </p>
+                    ) : (
+                      <Select value={field.value || undefined} onValueChange={onCardChange}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Elegí una tarjeta…" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {methodCards.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name} · {c.bank} ···· {c.last4} ({c.currency})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -236,7 +294,12 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Moneda</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      // En crédito/débito la moneda la fija la tarjeta elegida.
+                      disabled={needsCard}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
                           <SelectValue />
@@ -253,61 +316,63 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
               />
             </div>
 
-            <div className="grid grid-cols-2 items-start gap-4">
-              <FormField
-                control={form.control}
-                name="totalInstallments"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cuotas</FormLabel>
-                    <Select
-                      onValueChange={(v) => field.onChange(Number(v))}
-                      value={String(field.value)}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {INSTALLMENT_OPTIONS.map((n) => (
-                          <SelectItem key={n} value={String(n)}>
-                            {n}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {isCredit && (
+              <div className="grid grid-cols-2 items-start gap-4">
+                <FormField
+                  control={form.control}
+                  name="totalInstallments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cuotas</FormLabel>
+                      <Select
+                        onValueChange={(v) => field.onChange(Number(v))}
+                        value={String(field.value)}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {INSTALLMENT_OPTIONS.map((n) => (
+                            <SelectItem key={n} value={String(n)}>
+                              {n}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="financedTotal"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total con recargo (opc.)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.01"
-                        min="0"
-                        placeholder="Sin interés"
-                        value={field.value ?? ""}
-                        onChange={(e) =>
-                          field.onChange(
-                            e.target.value === "" ? undefined : e.target.valueAsNumber
-                          )
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                <FormField
+                  control={form.control}
+                  name="financedTotal"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Total con recargo (opc.)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.01"
+                          min="0"
+                          placeholder="Sin interés"
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value === "" ? undefined : e.target.valueAsNumber
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             <FormField
               control={form.control}
@@ -433,7 +498,7 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
 
             <DialogFooter>
               <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Guardando…" : "Registrar compra"}
+                {form.formState.isSubmitting ? "Guardando…" : "Registrar"}
               </Button>
             </DialogFooter>
           </form>

@@ -248,6 +248,62 @@ Ejemplo: $100,00 (`10000`) que el comercio ofrece en **3 cuotas de $38,59** → 
 
 > No usamos `(1 + i)^N` sobre el total (interés compuesto sobre el capital completo): sobreestima fuertemente el costo porque asume que nunca se amortiza capital (un préstamo *bullet*), p. ej. 10 % mensual en 12 cuotas triplicaría el total. Al tomar el total final como input evitamos ese sesgo y coincidimos con lo que el usuario ve en la caja. La TEM derivada usa el sistema francés, que sí modela la amortización.
 
+## Ahorros y medios de pago no-crédito (segundo eje)
+
+Además del eje de **crédito en cuotas** (compromiso de flujo futuro vs. ingreso →
+"disponible neto"), la app modela un **stock acumulado**: el **ahorro**. Es un segundo
+eje, conceptualmente distinto, con su propia matemática en `src/server/lib/savings.ts`
+(función pura, testeada).
+
+### Medios de pago (`Purchase.paymentMethod`)
+
+`CREDIT | DEBIT | TRANSFER | CASH`. El **crédito** genera cuotas (`Installment`) como
+siempre. Los tres restantes son **gastos de pago único** que descuentan del ahorro.
+
+- **Decisión clave: los gastos no-crédito NO materializan cuotas.** Viven en la propia
+  fila `Purchase` (pago único en `purchaseDate`), sin filas de `Installment`. El eje
+  crédito (calendario, proyección, disponible neto, deuda) **lee de `Installment`**;
+  como el débito/transferencia/efectivo no tienen, queda **estructuralmente imposible**
+  que contaminen las "cuotas comprometidas" — sin tener que recordar un filtro
+  `paymentMethod = CREDIT` en cada query. Un gasto en efectivo tampoco es un
+  "vencimiento" que deba aparecer en el calendario. El historial (`listPurchases`) lee de
+  `Purchase`, así que igual los muestra.
+- `cardId` es **nullable**: débito referencia una tarjeta de débito; transferencia y
+  efectivo no tienen tarjeta. `Card.type` (`CREDIT | DEBIT`) distingue las tarjetas; el
+  débito no tiene ciclo de facturación, así que `closingDay`/`dueDay`/`expirationDate`
+  son nullables (obligatorios solo para crédito, validado en Zod por `superRefine`).
+
+### Ingreso fechado por vigencia (`IncomeEntry`)
+
+El ingreso dejó de ser un número estático en `User` (`monthlyIncomeCents`, eliminado y
+backfilleado) y pasó a una **serie de entradas** `(currency, amountCents, validFrom)`,
+por moneda. El ingreso de un mes es la entrada con **mayor `validFrom ≤ mes`** (mismo
+patrón que `ExchangeRate.validFrom`): cambiarlo inserta una entrada nueva vigente desde
+el mes actual, y los meses pasados conservan su valor automáticamente, sin una fila por
+mes. Lo resuelve `incomeForMonth()`.
+
+### Cómo se computa el ahorro (`computeSavings`)
+
+El ahorro **no es una columna mutable**: se computa al leer (como `OVERDUE`) desde un
+**ancla** (`SavingsBalance`: saldo declarado por el usuario a la fecha `asOf`, por
+moneda, editable en Configuración). Acumulando mes a mes desde el ancla:
+
+```
+saldo(mes) = ancla + Σ ingreso(m) − Σ gastos no-crédito(m) − Σ cuotas-pagadas-desde-ahorros(m)
+             para los meses m entre el ancla y el mes objetivo
+```
+
+El dashboard muestra, por moneda:
+- **Ahorro disponible (`before`)**: saldo del mes antes de tocar las cuotas del mes.
+- **Ahorro tras cuotas (`after`)**: proyección que resta **todas** las cuotas de crédito
+  que vencen ese mes (decisión de producto: "si las pagás desde el ahorro, te queda X").
+- **Saldo real (`currentReal`)**: resta solo las cuotas que el usuario ya marcó como
+  pagadas-desde-ahorros (puente cuota↔ahorro: `Installment.paidFromSavings`, default
+  `true` al marcar pagada).
+
+Todo entero (BigInt) y por moneda (ARS/USD nunca se mezclan, RF-9.1). El bucketing por
+mes usa año/mes calendario (TZ-safe, igual que `buildProjection`).
+
 ## Deployment
 
 > **Postura actual (MVP):** la app se deploya en **Vercel** (la plataforma nativa de

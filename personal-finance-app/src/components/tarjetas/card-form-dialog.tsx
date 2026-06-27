@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
@@ -74,6 +74,7 @@ export function CardFormDialog({ card, trigger }: Props) {
   const [bankChoice, setBankChoice] = useState(initialBankChoice);
 
   const defaultValues: CardFormValues = {
+    type: (card?.type as "CREDIT" | "DEBIT") ?? "CREDIT",
     name: card?.name ?? "",
     owner: card?.owner ?? "",
     bank: card?.bank ?? "",
@@ -89,6 +90,10 @@ export function CardFormDialog({ card, trigger }: Props) {
     resolver: zodResolver(cardSchema),
     defaultValues,
   });
+
+  // El ciclo de cierre/vencimiento y el vencimiento MM/AA solo aplican a crédito.
+  const cardType = useWatch({ control: form.control, name: "type" });
+  const isCredit = cardType === "CREDIT";
 
   function resetAndClose() {
     setDuplicate(null);
@@ -207,7 +212,9 @@ export function CardFormDialog({ card, trigger }: Props) {
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar tarjeta" : "Nueva tarjeta"}</DialogTitle>
           <DialogDescription>
-            Configurá el ciclo de cierre y vencimiento para calcular bien las cuotas.
+            {isCredit
+              ? "Configurá el ciclo de cierre y vencimiento para calcular bien las cuotas."
+              : "El débito gasta contra tu saldo al instante: sin ciclo de facturación."}
           </DialogDescription>
         </DialogHeader>
 
@@ -216,6 +223,34 @@ export function CardFormDialog({ card, trigger }: Props) {
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+              <FormField
+                control={form.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      // El tipo se fija al crear: cambiarlo en una tarjeta con compras
+                      // dejaría cuotas sin ciclo. Para cambiarlo, dar de alta otra.
+                      disabled={isEdit}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="CREDIT">Crédito (en cuotas)</SelectItem>
+                        <SelectItem value="DEBIT">Débito</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="name"
@@ -346,26 +381,29 @@ export function CardFormDialog({ card, trigger }: Props) {
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="expiration"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vencimiento (MM/AA)</FormLabel>
-                    <FormControl>
-                      <Input
-                        inputMode="numeric"
-                        maxLength={5}
-                        placeholder="08/27"
-                        value={field.value}
-                        onChange={(e) => field.onChange(maskExpiration(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {isCredit && (
+                <FormField
+                  control={form.control}
+                  name="expiration"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vencimiento (MM/AA)</FormLabel>
+                      <FormControl>
+                        <Input
+                          inputMode="numeric"
+                          maxLength={5}
+                          placeholder="08/27"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(maskExpiration(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
+              {isCredit && (
               <div className="grid grid-cols-2 items-start gap-4">
                 <FormField
                   control={form.control}
@@ -423,6 +461,7 @@ export function CardFormDialog({ card, trigger }: Props) {
                   )}
                 />
               </div>
+              )}
 
               <FormField
                 control={form.control}

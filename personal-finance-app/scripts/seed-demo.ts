@@ -62,12 +62,30 @@ async function main() {
     const user = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
     if (!user) throw new Error(`No existe un usuario con el email ${DEMO_EMAIL}`);
 
-    // Limpieza previa (las cuotas caen por cascade) + ingreso y moneda realistas.
+    // Limpieza previa (las cuotas caen por cascade) + ingreso, ahorro y moneda realistas.
     await prisma.purchase.deleteMany({ where: { userId: user.id } });
     await prisma.card.deleteMany({ where: { userId: user.id } });
+    await prisma.incomeEntry.deleteMany({ where: { userId: user.id } });
+    await prisma.savingsBalance.deleteMany({ where: { userId: user.id } });
     await prisma.user.update({
       where: { id: user.id },
-      data: { monthlyIncomeCents: 2_400_000_00n, defaultCurrency: "ARS" },
+      data: { defaultCurrency: "ARS" },
+    });
+    // Ingreso fechado (IncomeEntry): vigente desde un mes base anterior a las compras.
+    const incomeFrom = new Date(2025, 0, 1);
+    await prisma.incomeEntry.createMany({
+      data: [
+        { userId: user.id, currency: "ARS", amountCents: 2_400_000_00n, validFrom: incomeFrom },
+        { userId: user.id, currency: "USD", amountCents: 1_500_00n, validFrom: incomeFrom },
+      ],
+    });
+    // Saldo de ahorro inicial declarado por moneda (ancla del modelo SavingsBalance).
+    const savingsAsOf = new Date(2025, 0, 1);
+    await prisma.savingsBalance.createMany({
+      data: [
+        { userId: user.id, currency: "ARS", amountCents: 5_000_000_00n, asOf: savingsAsOf },
+        { userId: user.id, currency: "USD", amountCents: 3_000_00n, asOf: savingsAsOf },
+      ],
     });
 
     // Categorías por defecto si la cuenta no las tiene (cuentas pre-hook).

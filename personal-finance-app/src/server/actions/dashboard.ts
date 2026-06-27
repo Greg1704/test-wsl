@@ -2,101 +2,275 @@
 
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
-import { addMonths, monthRange, startOfMonth, startOfToday } from "@/server/lib/dates";
+import { addMonths, monthRange, startOfMonth } from "@/server/lib/dates";
 import {
   buildCategoryBreakdown,
   buildProjection,
   type CategoryBreakdown,
   type ProjectionSeries,
 } from "@/server/lib/dashboard";
+import {
+  computeSavings,
+  buildSavingsProjection,
+} from "@/server/lib/savings";
+import {
+  getMonthlyOverviewForUser,
+  type MonthlyOverview,
+} from "@/server/queries/monthly-overview";
 import type { OnboardingFlags } from "@/server/lib/onboarding";
 
-/** Resumen de una moneda para el mes (RF-5.1). `income`/`net` solo en la principal. */
-export type CurrencyOverview = {
+// Re-export para los consumidores existentes (dashboard, simulador) que importan los
+// tipos desde esta action.
+export type { MonthlyOverview, CurrencyOverview } from "@/server/queries/monthly-overview";
+
+/**
+ * Resumen del dashboard para un mes (RF-5), scopeado por el `userId` de sesión. La
+ * lógica vive en `getMonthlyOverviewForUser` (compartida con el cron del reporte
+ * mensual); acá solo resolvemos el usuario de la sesión. Llamado desde un Server
+ * Component, así que devuelve `bigint` (se formatea en el server, sin cruzar el borde).
+ */
+export async function getMonthlyOverview(month: Date): Promise<MonthlyOverview> {
+  const user = await requireUser();
+  return getMonthlyOverviewForUser(user.id, month);
+}
+
+/** Ahorro de una moneda para el mes: disponible, proyección tras cuotas y saldo real. */
+export type SavingsCurrencyOverview = {
   currency: string;
-  committedCents: bigint;
-  nextDue: { dueDate: Date; amountCents: bigint } | null;
-  incomeCents: bigint | null;
-  netCents: bigint | null;
+  beforeCents: bigint;
+  afterCents: bigint;
+  currentRealCents: bigint;
 };
 
-export type MonthlyOverview = {
+export type SavingsOverview = {
   defaultCurrency: string;
-  hasIncome: boolean;
-  overdueCount: number;
-  currencies: CurrencyOverview[];
+  /** Solo monedas con algún dato de ahorro (ancla, ingreso o gasto no-crédito). */
+  currencies: SavingsCurrencyOverview[];
 };
 
 /**
- * Resumen del dashboard para un mes (RF-5). Por cada moneda: total comprometido
- * (todas las cuotas que vencen ese mes), próximo vencimiento y —solo en la moneda
- * principal— ingreso y disponible neto. Más el conteo global de cuotas vencidas.
- * Todo scopeado por el `userId` de sesión. Llamado desde un Server Component, así
- * que devuelve `bigint` (se formatea en el server, sin cruzar el borde a Client).
+ * Ahorro por moneda para el mes navegado (RF-ahorros). Junta el ancla declarada
+ * (`SavingsBalance`), el ingreso fechado (`IncomeEntry`), los gastos no-crédito
+ * (débito/transferencia/efectivo) y las cuotas pagadas-desde-ahorros, y delega el
+ * cálculo en la función pura `computeSavings`. Todo scopeado por el `userId` de sesión.
  */
-export async function getMonthlyOverview(month: Date): Promise<MonthlyOverview> {
+export async function getSavingsOverview(month: Date): Promise<SavingsOverview> {
   const user = await requireUser();
   const { gte, lt } = monthRange(month);
 
   const profile = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { monthlyIncomeCents: true, defaultCurrency: true },
+    select: { defaultCurrency: true },
   });
   const defaultCurrency = profile?.defaultCurrency ?? "ARS";
-  const incomeCents = profile?.monthlyIncomeCents ?? 0n;
 
-  // Total comprometido por moneda (cuotas que vencen en el mes, pagas o no).
-  const grouped = await prisma.installment.groupBy({
-    by: ["currency"],
-    where: { dueDate: { gte, lt }, purchase: { userId: user.id } },
-    _sum: { amountCents: true },
-  });
-  const committedByCurrency = new Map<string, bigint>();
-  for (const g of grouped) {
-    committedByCurrency.set(g.currency, g._sum.amountCents ?? 0n);
-  }
+  const [anchors, incomeRows, nonCredit, savingsCuotas, committedGrouped] =
+    await Promise.all([
+      prisma.savingsBalance.findMany({
+        where: { userId: user.id },
+        select: { currency: true, amountCents: true, asOf: true },
+      }),
+      prisma.incomeEntry.findMany({
+        where: { userId: user.id },
+        select: { currency: true, amountCents: true, validFrom: true },
+      }),
+      // Gastos no-crédito: pago único que descuenta del ahorro (no tienen cuotas).
+      prisma.purchase.findMany({
+        where: { userId: user.id, paymentMethod: { in: ["DEBIT", "TRANSFER", "CASH"] } },
+        select: { currency: true, purchaseDate: true, totalAmountCents: true },
+      }),
+      // Cuotas de crédito que el usuario marcó pagadas-desde-ahorros.
+      prisma.installment.findMany({
+        where: { purchase: { userId: user.id }, paidFromSavings: true, status: "PAID" },
+        select: { currency: true, paidAt: true, amountCents: true },
+      }),
+      // Cuotas que vencen en el mes, por moneda (para la proyección "tras cuotas").
+      prisma.installment.groupBy({
+        by: ["currency"],
+        where: { dueDate: { gte, lt }, purchase: { userId: user.id } },
+        _sum: { amountCents: true },
+      }),
+    ]);
 
-  // Cuotas vencidas: impagas con vencimiento anterior a hoy (badge de alerta, RF-5.2).
-  const overdueCount = await prisma.installment.count({
-    where: {
-      status: "PENDING",
-      dueDate: { lt: startOfToday() },
-      purchase: { userId: user.id },
-    },
-  });
+  // Agrupados por moneda en memoria.
+  const byCurrency = <T extends { currency: string }>(rows: T[]) => {
+    const map = new Map<string, T[]>();
+    for (const r of rows) {
+      const list = map.get(r.currency) ?? [];
+      list.push(r);
+      map.set(r.currency, list);
+    }
+    return map;
+  };
+  const anchorByCurrency = new Map(anchors.map((a) => [a.currency, a]));
+  const incomeByCurrency = byCurrency(incomeRows);
+  const expenseByCurrency = byCurrency(nonCredit);
+  const cuotaByCurrency = byCurrency(savingsCuotas.filter((c) => c.paidAt));
+  const committedByCurrency = new Map(
+    committedGrouped.map((g) => [g.currency, g._sum.amountCents ?? 0n])
+  );
 
-  // Monedas a mostrar: la principal siempre, más cualquiera con cuotas en el mes.
-  const currencySet = new Set<string>([defaultCurrency, ...committedByCurrency.keys()]);
+  // Monedas a mostrar: la principal + cualquiera con ancla, ingreso o gasto no-crédito.
+  const currencySet = new Set<string>([
+    defaultCurrency,
+    ...anchorByCurrency.keys(),
+    ...incomeByCurrency.keys(),
+    ...expenseByCurrency.keys(),
+  ]);
 
-  const currencies: CurrencyOverview[] = [];
+  const currencies: SavingsCurrencyOverview[] = [];
   for (const currency of currencySet) {
-    const committedCents = committedByCurrency.get(currency) ?? 0n;
-    const nextDue = await prisma.installment.findFirst({
-      where: {
-        currency,
-        status: "PENDING",
-        dueDate: { gte: startOfToday() },
-        purchase: { userId: user.id },
-      },
-      orderBy: { dueDate: "asc" },
-      select: { dueDate: true, amountCents: true },
+    const anchor = anchorByCurrency.get(currency);
+    const result = computeSavings({
+      anchor: anchor ? { amountCents: anchor.amountCents, asOf: anchor.asOf } : null,
+      incomeEntries: (incomeByCurrency.get(currency) ?? []).map((e) => ({
+        amountCents: e.amountCents,
+        validFrom: e.validFrom,
+      })),
+      nonCreditExpenses: (expenseByCurrency.get(currency) ?? []).map((e) => ({
+        purchaseDate: e.purchaseDate,
+        amountCents: e.totalAmountCents,
+      })),
+      savingsCuotas: (cuotaByCurrency.get(currency) ?? []).map((c) => ({
+        paidAt: c.paidAt!,
+        amountCents: c.amountCents,
+      })),
+      month,
+      committedThisMonthCents: committedByCurrency.get(currency) ?? 0n,
     });
-    const isDefault = currency === defaultCurrency;
-    currencies.push({
-      currency,
-      committedCents,
-      nextDue,
-      incomeCents: isDefault ? incomeCents : null,
-      netCents: isDefault ? incomeCents - committedCents : null,
-    });
+    currencies.push({ currency, ...result });
   }
 
-  // La moneda principal va primero.
   currencies.sort((a, b) =>
     a.currency === defaultCurrency ? -1 : b.currency === defaultCurrency ? 1 : 0
   );
 
-  return { defaultCurrency, hasIncome: incomeCents > 0n, overdueCount, currencies };
+  return { defaultCurrency, currencies };
+}
+
+export type SavingsProjectionSeries = {
+  currency: string;
+  months: { month: Date; beforeCents: bigint }[];
+};
+
+/**
+ * Serie del ahorro disponible proyectado `months` meses desde `fromMonth`, por moneda
+ * (RF-ahorros). Junta los mismos insumos que `getSavingsOverview` (ancla, ingreso, gastos
+ * no-crédito, cuotas-desde-ahorros) y delega en la función pura `buildSavingsProjection`.
+ * Scopeada por el `userId` de sesión.
+ */
+export async function getSavingsProjection(
+  fromMonth: Date,
+  months: number = 12
+): Promise<SavingsProjectionSeries[]> {
+  const user = await requireUser();
+
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { defaultCurrency: true },
+  });
+  const defaultCurrency = profile?.defaultCurrency ?? "ARS";
+
+  const [anchors, incomeRows, nonCredit, savingsCuotas] = await Promise.all([
+    prisma.savingsBalance.findMany({
+      where: { userId: user.id },
+      select: { currency: true, amountCents: true, asOf: true },
+    }),
+    prisma.incomeEntry.findMany({
+      where: { userId: user.id },
+      select: { currency: true, amountCents: true, validFrom: true },
+    }),
+    prisma.purchase.findMany({
+      where: { userId: user.id, paymentMethod: { in: ["DEBIT", "TRANSFER", "CASH"] } },
+      select: { currency: true, purchaseDate: true, totalAmountCents: true },
+    }),
+    prisma.installment.findMany({
+      where: { purchase: { userId: user.id }, paidFromSavings: true, status: "PAID" },
+      select: { currency: true, paidAt: true, amountCents: true },
+    }),
+  ]);
+
+  const byCurrency = <T extends { currency: string }>(rows: T[]) => {
+    const map = new Map<string, T[]>();
+    for (const r of rows) {
+      const list = map.get(r.currency) ?? [];
+      list.push(r);
+      map.set(r.currency, list);
+    }
+    return map;
+  };
+  const anchorByCurrency = new Map(anchors.map((a) => [a.currency, a]));
+  const incomeByCurrency = byCurrency(incomeRows);
+  const expenseByCurrency = byCurrency(nonCredit);
+  const cuotaByCurrency = byCurrency(savingsCuotas.filter((c) => c.paidAt));
+
+  const currencySet = new Set<string>([
+    defaultCurrency,
+    ...anchorByCurrency.keys(),
+    ...incomeByCurrency.keys(),
+    ...expenseByCurrency.keys(),
+  ]);
+
+  const series: SavingsProjectionSeries[] = [];
+  for (const currency of currencySet) {
+    const anchor = anchorByCurrency.get(currency);
+    const months_ = buildSavingsProjection(
+      {
+        anchor: anchor ? { amountCents: anchor.amountCents, asOf: anchor.asOf } : null,
+        incomeEntries: (incomeByCurrency.get(currency) ?? []).map((e) => ({
+          amountCents: e.amountCents,
+          validFrom: e.validFrom,
+        })),
+        nonCreditExpenses: (expenseByCurrency.get(currency) ?? []).map((e) => ({
+          purchaseDate: e.purchaseDate,
+          amountCents: e.totalAmountCents,
+        })),
+        savingsCuotas: (cuotaByCurrency.get(currency) ?? []).map((c) => ({
+          paidAt: c.paidAt!,
+          amountCents: c.amountCents,
+        })),
+      },
+      fromMonth,
+      months
+    );
+    series.push({ currency, months: months_ });
+  }
+
+  series.sort((a, b) =>
+    a.currency === defaultCurrency ? -1 : b.currency === defaultCurrency ? 1 : 0
+  );
+  return series;
+}
+
+/**
+ * Desglose por categoría del GASTO NO-CRÉDITO del mes (débito/transferencia/efectivo),
+ * por moneda. Reusa la función pura `buildCategoryBreakdown` con las compras no-crédito
+ * (que no tienen cuotas). Scopeado por el `userId` de sesión.
+ */
+export async function getNonCreditBreakdown(month: Date): Promise<CategoryBreakdown[]> {
+  const user = await requireUser();
+  const { gte, lt } = monthRange(month);
+
+  const rows = await prisma.purchase.findMany({
+    where: {
+      userId: user.id,
+      paymentMethod: { in: ["DEBIT", "TRANSFER", "CASH"] },
+      purchaseDate: { gte, lt },
+    },
+    select: {
+      totalAmountCents: true,
+      currency: true,
+      category: { select: { id: true, name: true, color: true } },
+    },
+  });
+
+  return buildCategoryBreakdown(
+    rows.map((r) => ({
+      amountCents: r.totalAmountCents,
+      currency: r.currency,
+      category: r.category,
+    }))
+  );
 }
 
 /**
@@ -108,17 +282,14 @@ export async function getMonthlyOverview(month: Date): Promise<MonthlyOverview> 
 export async function getOnboardingStatus(): Promise<OnboardingFlags> {
   const user = await requireUser();
 
-  const [profile, cardCount, purchaseCount] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: user.id },
-      select: { monthlyIncomeCents: true },
-    }),
+  const [incomeCount, cardCount, purchaseCount] = await Promise.all([
+    prisma.incomeEntry.count({ where: { userId: user.id } }),
     prisma.card.count({ where: { userId: user.id } }),
     prisma.purchase.count({ where: { userId: user.id } }),
   ]);
 
   return {
-    hasIncome: (profile?.monthlyIncomeCents ?? 0n) > 0n,
+    hasIncome: incomeCount > 0,
     hasCards: cardCount > 0,
     hasPurchases: purchaseCount > 0,
   };
@@ -154,8 +325,9 @@ export async function getProjection(
       dueDate: r.dueDate,
       amountCents: r.amountCents,
       currency: r.currency,
-      cardId: r.purchase.card.id,
-      cardName: r.purchase.card.name,
+      // Las cuotas solo existen para crédito ⇒ siempre hay tarjeta.
+      cardId: r.purchase.card!.id,
+      cardName: r.purchase.card!.name,
     })),
     fromMonth,
     months

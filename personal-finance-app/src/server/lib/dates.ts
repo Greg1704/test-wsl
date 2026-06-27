@@ -49,14 +49,20 @@ export function parseExpiration(mmYY: string): Date {
   return lastDayOfMonth(new Date(year, month, 1));
 }
 
-/** Formatea una fecha de vencimiento como "MM/AA" (para precargar el form). */
-export function formatExpiration(date: Date): string {
-  return format(date, "MM/yy");
+/**
+ * Formatea una fecha de vencimiento como "MM/AA" (para precargar el form). Las
+ * tarjetas de DÉBITO no tienen vencimiento (`null`) → devuelve "" (sin dato).
+ */
+export function formatExpiration(date: Date | null): string {
+  return date ? format(date, "MM/yy") : "";
 }
 
-/** True si la tarjeta ya venció (su fecha de vencimiento quedó antes de hoy). */
-export function isCardExpired(expirationDate: Date): boolean {
-  return expirationDate < startOfDay(new Date());
+/**
+ * True si la tarjeta ya venció (su fecha de vencimiento quedó antes de hoy). Las de
+ * débito no vencen (`null`) → nunca están vencidas.
+ */
+export function isCardExpired(expirationDate: Date | null): boolean {
+  return expirationDate != null && expirationDate < startOfDay(new Date());
 }
 
 /**
