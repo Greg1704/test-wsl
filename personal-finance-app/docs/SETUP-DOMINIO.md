@@ -1,8 +1,15 @@
-# SETUP — Dominio del portfolio (pendiente)
+# SETUP — Dominio del portfolio
 
-Notas para cuando se compre el dominio. Hoy **no hay dominio propio**: producción usa la
-URL de Vercel (`personal-finance-app-gf.vercel.app`) y los mails salen desde el dominio de
-prueba de Resend (`onboarding@resend.dev`). Ver `docs/SETUP-EMAILS.md` → paso 4.
+> **Estado: HECHO.** Dominio comprado en **Cloudflare**: `gfirm.dev`. La app vive en el
+> subdominio **`cuotapp.gfirm.dev`** (Custom Domain en Vercel, HTTPS automático). En prod,
+> `BETTER_AUTH_URL` y `NEXT_PUBLIC_APP_URL` apuntan a ese subdominio.
+>
+> **Mails:** el subdominio `cuotapp.gfirm.dev` se está verificando en Resend (SPF/DKIM vía
+> Cloudflare). El paso final es cambiar `EMAIL_FROM` a `noreply@cuotapp.gfirm.dev` una vez
+> que Resend lo marque *Verified*. Ver `docs/SETUP-EMAILS.md` → paso 4.
+
+Las notas de abajo son el razonamiento de la decisión (registrar, TLD, estructura de
+subdominios), que se conserva como registro del porqué.
 
 ## Idea: un dominio para todo el portfolio (subdominios)
 
@@ -60,9 +67,10 @@ otraapp.tudominio.dev    → otro proyecto
 3. **DNS:** manejarlo desde Cloudflare → desde un solo panel se cargan los CNAME para Vercel
    y los SPF/DKIM para Resend.
 
-## Cuando se compre (checklist)
+## Checklist
 
-- [ ] Comprar 1 dominio (Cloudflare, `.dev` o `.com`).
-- [ ] Apuntar `cuotapp.<dominio>` a la app en Vercel (Custom Domain).
-- [ ] Verificar el subdominio en Resend (SPF/DKIM) — ver `docs/SETUP-EMAILS.md` paso 4.1.
-- [ ] Cambiar `EMAIL_FROM` en Vercel a `CuotApp <noreply@cuotapp.<dominio>>`.
+- [x] Comprar 1 dominio → **`gfirm.dev`** (Cloudflare Registrar).
+- [x] Apuntar `cuotapp.gfirm.dev` a la app en Vercel (Custom Domain, HTTPS automático).
+- [x] Actualizar `BETTER_AUTH_URL` y `NEXT_PUBLIC_APP_URL` en Vercel al subdominio + redeploy.
+- [ ] Verificar el subdominio en Resend (SPF/DKIM vía Cloudflare) — **en proceso**, ver `docs/SETUP-EMAILS.md` paso 4.1.
+- [ ] Cambiar `EMAIL_FROM` en Vercel a `CuotApp <noreply@cuotapp.gfirm.dev>` + redeploy (cuando Resend marque *Verified*).

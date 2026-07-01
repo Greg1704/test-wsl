@@ -98,20 +98,19 @@ curl -s -H "Authorization: Bearer $(grep '^CRON_SECRET=' .env | cut -d= -f2- | t
 > dominio, y `vercel.app` es de Vercel: no controlás su DNS, así que Resend nunca lo va a
 > marcar como *Verified*. Hace falta un **dominio propio** (comprado).
 >
-> **Plan a futuro — un dominio para todo el portfolio (subdominios).** No hace falta comprar
-> un dominio por app. Con **un solo** dominio (ej. `tudominio.dev`) se cuelga cada proyecto de
-> un **subdominio** sin costo extra (los subdominios son registros DNS, ilimitados y gratis):
-> `cuotapp.tudominio.dev`, `otraapp.tudominio.dev`, etc. Para esta app, en Resend se verifica
-> el subdominio (`cuotapp.tudominio.dev`) y `EMAIL_FROM` queda `CuotApp <noreply@cuotapp.tudominio.dev>`.
-> Usar un subdominio para el envío es además la **práctica recomendada**: aísla la reputación
-> de envío de cada app de la del dominio raíz. Comparado con comprar un dominio por proyecto,
-> esto cuesta **una sola compra** (~USD 10-15/año) en vez de multiplicarla por cada app.
+> **Un dominio para todo el portfolio (subdominios).** No hace falta comprar un dominio por
+> app. Con **un solo** dominio se cuelga cada proyecto de un **subdominio** sin costo extra
+> (los subdominios son registros DNS, ilimitados y gratis). Para esta app se usa el subdominio
+> `cuotapp.gfirm.dev`: en Resend se verifica ese subdominio y `EMAIL_FROM` queda
+> `CuotApp <noreply@cuotapp.gfirm.dev>`. Usar un subdominio para el envío es además la
+> **práctica recomendada**: aísla la reputación de envío de cada app de la del dominio raíz.
 >
-> **Estado actual: PENDIENTE.** Todavía no se compró un dominio. Hasta entonces, en
-> producción dejamos `EMAIL_FROM` con el dominio de prueba `onboarding@resend.dev` (solo
-> entrega a la propia dirección registrada en Resend — alcanza para la demo de portfolio).
-> El día que se compre el dominio: verificar el subdominio acá y cambiar **solo** `EMAIL_FROM`
-> en Vercel.
+> **Estado actual: dominio comprado (`gfirm.dev`, Cloudflare), verificación EN PROCESO.** El
+> subdominio `cuotapp.gfirm.dev` se está verificando en Resend vía Domain Connect (Resend
+> carga SPF + DKIM + el MX de Return-Path en Cloudflare automáticamente, todos *DNS only* —
+> sin proxear). Cuando Resend lo marque *Verified*, cambiar `EMAIL_FROM` en Vercel a
+> `CuotApp <noreply@cuotapp.gfirm.dev>` + redeploy. Hasta entonces, prod sigue con
+> `onboarding@resend.dev` (solo entrega a la dirección registrada en Resend).
 
 ### 4.2 Variables en Vercel
 *Project Settings → Environment Variables* (marcá **Production**):
@@ -119,7 +118,7 @@ curl -s -H "Authorization: Bearer $(grep '^CRON_SECRET=' .env | cut -d= -f2- | t
 | Variable | Valor |
 |---|---|
 | `RESEND_API_KEY` | la API key de Resend (podés usar una distinta a la de dev) |
-| `EMAIL_FROM` | `CuotApp <noreply@tudominio.com>` (dominio verificado) |
+| `EMAIL_FROM` | `CuotApp <noreply@cuotapp.gfirm.dev>` (tras verificar el subdominio) |
 | `CRON_SECRET` | uno nuevo: `openssl rand -base64 32` |
 
 > Vercel inyecta `CRON_SECRET` automáticamente como header `Authorization: Bearer <CRON_SECRET>`
@@ -144,7 +143,8 @@ dispara como máximo 1×/día, así que un cron mensual entra sin problema. Lo v
 - [ ] `.env` local con `RESEND_API_KEY`, `EMAIL_FROM`, `CRON_SECRET`.
 - [ ] Flujo de reset probado en local (mail recibido + contraseña cambiada).
 - [ ] Reporte mensual probado con `curl` (200 con el secret, 401 sin él).
-- [ ] ~~Dominio verificado en Resend (SPF/DKIM) para producción.~~ **PENDIENTE: comprar 1 dominio para el portfolio y verificar el subdominio `cuotapp.tudominio` en Resend** (el `*.vercel.app` no sirve). Mientras tanto, prod usa `onboarding@resend.dev`.
+- [x] Dominio comprado (`gfirm.dev`, Cloudflare) y subdominio `cuotapp.gfirm.dev` en Vercel.
+- [ ] Subdominio verificado en Resend (SPF/DKIM) — **en proceso** (Domain Connect). Cuando quede *Verified*, cambiar `EMAIL_FROM` a `noreply@cuotapp.gfirm.dev` en Vercel + redeploy. Mientras tanto, prod usa `onboarding@resend.dev`.
 - [ ] Las tres variables cargadas en Vercel (Production).
 - [ ] Deploy hecho → cron visible en *Vercel → Crons*.
 
