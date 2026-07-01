@@ -238,5 +238,5 @@ Si los cinco funcionan, el entorno está listo. El deploy (Vercel + Neon; Docker
 6. **Fase 5** — Testing + CI/CD.
 7. **Fase 6** — Deploy a Vercel + Neon.
 
-El roadmap canónico, la frontera del MVP (Fases 1-4) y la visión a futuro están en
-`docs/ROADMAP.md`.
+Los requerimientos por fase y la frontera del MVP (Fases 1-4) están en
+`docs/REQUIREMENTS.md`; la visión a futuro, en `docs/BACKLOG.md`.

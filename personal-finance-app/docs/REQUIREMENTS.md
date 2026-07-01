@@ -2,11 +2,11 @@
 
 Requerimientos funcionales y no funcionales del sistema. Sirve de referencia tanto para el desarrollo manual como para Claude Code al construir cada feature.
 
-Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
+Convención de alcance (el MVP —Fases 1-6— ya está completo y en producción):
 - **(MVP)** → Fases 1-4 (auth, tarjetas, compras, cuotas, dashboard, calendario y **simulador**).
-- **(Post-MVP)** → alertas, multi-moneda consolidada, OAuth, etc.
-- La expansión de dominio a largo plazo (débito/efectivo, ingresos variables, préstamos,
-  cuentas/saldos) está en la sección "Visión a futuro" de `ROADMAP.md`.
+- **(Post-MVP)** → alertas, multi-moneda consolidada, OAuth, etc. Ver `docs/BACKLOG.md`.
+- La expansión de dominio a largo plazo (ingresos variables, préstamos, cuentas/saldos)
+  vive en `docs/BACKLOG.md`.
 
 ---
 
@@ -168,7 +168,7 @@ Convención de alcance (roadmap canónico en `docs/ROADMAP.md`):
 
 ## Trazabilidad (requerimiento → fase del roadmap)
 
-Definición canónica de las fases en `docs/ROADMAP.md`. **MVP = Fases 1-4.**
+**MVP = Fases 1-4** (Fases 1-6 completas y en producción). Ideas post-MVP en `docs/BACKLOG.md`.
 
 | Fase | Requerimientos cubiertos |
 |---|---|

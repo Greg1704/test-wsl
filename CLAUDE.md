@@ -103,7 +103,7 @@ docker compose up -d postgres          # levantar la base local
 
 ## Documentación de referencia
 
-- `docs/ROADMAP.md` — **fuente de verdad de fases y alcance** (MVP = Fases 1-4, visión a futuro).
+- `docs/REQUIREMENTS.md` — **fuente de verdad de requerimientos y alcance** (MVP = Fases 1-4, ya completo).
+- `docs/BACKLOG.md` — ideas y features **post-MVP** (visión a futuro).
 - `docs/SETUP.md` — cómo levantar el proyecto desde cero.
 - `docs/ARCHITECTURE.md` — modelo de datos, esquema Prisma, deployment.
-- `docs/REQUIREMENTS.md` — requerimientos funcionales y no funcionales
