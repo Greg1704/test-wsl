@@ -23,7 +23,9 @@ import {
   listInstallmentsByMonth,
 } from "@/server/actions/dashboard";
 import { computeDisplayStatus } from "@/server/lib/installment-status";
+import { getCardsUtilization } from "@/server/actions/cards";
 import { completedSteps } from "@/server/lib/onboarding";
+import { WARNING_THRESHOLD } from "@/server/lib/card-utilization";
 import { percentOfIncome } from "@/server/lib/dashboard";
 import { centsToCurrency, formatMoney } from "@/server/lib/money";
 import {
@@ -48,6 +50,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MonthInstallmentsDialog } from "@/components/compras/month-installments-dialog";
 import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
 import { NextStepBanner } from "@/components/dashboard/next-step-banner";
+import { CardLimitsAlert } from "@/components/dashboard/card-limits-alert";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { ProjectionChart } from "@/components/dashboard/projection-chart";
 import { SavingsProjectionChart } from "@/components/dashboard/savings-projection-chart";
@@ -84,6 +87,7 @@ export default async function DashboardPage({
     savings,
     savingsProjection,
     nonCreditBreakdown,
+    cardsUtilization,
   ] = await Promise.all([
     getMonthlyOverview(month),
     listInstallmentsByMonth(month),
@@ -93,7 +97,13 @@ export default async function DashboardPage({
     getSavingsOverview(month),
     getSavingsProjection(month, PROJECTION_MONTHS),
     getNonCreditBreakdown(month),
+    getCardsUtilization(),
   ]);
+
+  // Tarjetas cerca (o por encima) de su límite: solo la señal, la barra vive en /tarjetas.
+  const cardLimitAlerts = cardsUtilization
+    .filter((u) => u.percent >= WARNING_THRESHOLD)
+    .map((u) => ({ cardId: u.cardId, name: u.name, currency: u.currency, percent: u.percent }));
 
   const { defaultCurrency } = overview;
 
@@ -243,6 +253,9 @@ export default async function DashboardPage({
 
       {/* Banner generalizado: empuja al único paso de alta que falte. */}
       <NextStepBanner flags={onboarding} />
+
+      {/* Alerta de tarjetas cerca del límite de crédito (utilización alta). */}
+      <CardLimitsAlert cards={cardLimitAlerts} />
 
       {/* HÉROE: las cuatro cifras titulares de los dos ejes, en la moneda seleccionada. */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

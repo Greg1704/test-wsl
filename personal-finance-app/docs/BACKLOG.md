@@ -35,6 +35,28 @@ cuotas futuras (barra de utilización).
   ("si comprás esto, quedás al 85% del límite").
 - **Esfuerzo:** bajo-medio.
 
+> **Estado: parcialmente implementado.** Columna `Card.creditLimitCents` (BigInt,
+> centavos, moneda principal = `currencies[0]`), cálculo puro y testeado en
+> `src/server/lib/card-utilization.ts`, barra inline por tarjeta (`CardItem`) y alerta
+> en el dashboard (`CardLimitsAlert`, tarjetas ≥ 75% del límite). El "uso" es la suma de
+> cuotas NO pagadas por tarjeta/moneda (`getCardsUtilization`). El límite es **requerido**
+> al alta/edición de una tarjeta de crédito (Zod `superRefine`).
+>
+> **Pendiente:**
+> - Integración con el **simulador** (proyectar la utilización pre-compra: "si comprás
+>   esto, quedás al 92% del límite").
+> - **Decisión de producto — "moneda principal" en tarjetas multi-moneda.** Hoy el límite
+>   y la barra usan `currencies[0]`, que es solo el **primer elemento del array** (orden de
+>   inserción, típicamente el `defaultCurrency` del usuario). No es una elección deliberada
+>   y es **frágil**: reordenar las monedas al editar cambia cuál es la "principal". Además,
+>   en una tarjeta ARS+USD real solo se muestra el límite de esa primera moneda; lo
+>   comprometido en la otra no tiene barra. Hay que decidir entre: (a) hacerlo **explícito**
+>   con un campo `Card.primaryCurrency` / selector "moneda del límite" en el form (barato,
+>   quita la fragilidad), o (b) modelar un **límite por moneda** (columna extra o modelo
+>   `CardCreditLimit`) y renderizar una barra por cada moneda de la tarjeta (lo correcto a
+>   futuro, más esfuerzo). Para el MVP `currencies[0]` alcanza porque la mayoría de las
+>   tarjetas son ARS-only.
+
 ---
 
 ## También vale la pena

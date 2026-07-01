@@ -6,8 +6,11 @@ import {
   listActiveCards,
   listExpiredCards,
   listDeactivatedCards,
+  getCardsUtilization,
 } from "@/server/actions/cards";
 import { formatExpiration } from "@/server/lib/dates";
+import { formatMoney } from "@/server/lib/money";
+import { toCardView } from "@/lib/card-view";
 import { Button } from "@/components/ui/button";
 import { CardFormDialog } from "@/components/tarjetas/card-form-dialog";
 import { CardItem } from "@/components/tarjetas/card-item";
@@ -17,16 +20,30 @@ import { RenewCardDialog } from "@/components/tarjetas/renew-card-dialog";
 export default async function TarjetasPage() {
   // Server Component: lee la DB directo, sin fetch ni API intermedia.
   const user = await requireUser();
-  const [active, expired, deactivated, profile] = await Promise.all([
+  const [active, expired, deactivated, profile, utilization] = await Promise.all([
     listActiveCards(),
     listExpiredCards(),
     listDeactivatedCards(),
     prisma.user.findUnique({ where: { id: user.id }, select: { defaultCurrency: true } }),
+    getCardsUtilization(),
   ]);
 
   const hasAny = active.length + expired.length + deactivated.length > 0;
   // Moneda principal del usuario (Configuración): preselección en el alta de tarjeta.
   const defaultCurrency: "ARS" | "USD" = profile?.defaultCurrency === "USD" ? "USD" : "ARS";
+
+  // Utilización por tarjeta, ya formateada para la barra (borde serializable).
+  const utilByCard = new Map(
+    utilization.map((u) => [
+      u.cardId,
+      {
+        currency: u.currency,
+        percent: u.percent,
+        usedLabel: formatMoney(BigInt(u.usedCents), u.currency),
+        limitLabel: formatMoney(BigInt(u.limitCents), u.currency),
+      },
+    ])
+  );
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
@@ -38,7 +55,9 @@ export default async function TarjetasPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {deactivated.length > 0 && <DeactivatedCardsDialog cards={deactivated} />}
+          {deactivated.length > 0 && (
+            <DeactivatedCardsDialog cards={deactivated.map(toCardView)} />
+          )}
           <CardFormDialog
             defaultCurrency={defaultCurrency}
             trigger={<Button>+ Nueva tarjeta</Button>}
@@ -65,7 +84,11 @@ export default async function TarjetasPage() {
           {active.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {active.map((card) => (
-                <CardItem key={card.id} card={card} />
+                <CardItem
+                  key={card.id}
+                  card={toCardView(card)}
+                  utilization={utilByCard.get(card.id)}
+                />
               ))}
             </div>
           ) : (

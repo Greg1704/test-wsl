@@ -2,10 +2,11 @@
 
 import { CreditCard } from "lucide-react";
 
-import type { Card as CardModel } from "@/generated/prisma/client";
+import type { CardView } from "@/lib/card-view";
 import { cn } from "@/lib/utils";
 import { findBank } from "@/lib/banks";
 import { formatExpiration } from "@/server/lib/dates";
+import { utilizationLevel } from "@/server/lib/card-utilization";
 import {
   Card,
   CardContent,
@@ -17,7 +18,28 @@ import { Button } from "@/components/ui/button";
 import { CardFormDialog } from "@/components/tarjetas/card-form-dialog";
 import { DeactivateCardButton } from "@/components/tarjetas/deactivate-card-button";
 
-export function CardItem({ card }: { card: CardModel }) {
+/** Utilización ya calculada y formateada en el server (borde serializable). */
+export type CardUtilization = {
+  currency: string;
+  percent: number;
+  usedLabel: string;
+  limitLabel: string;
+};
+
+/** Color de la barra según el nivel de utilización (mismo criterio que el dashboard). */
+const BAR_CLASS: Record<ReturnType<typeof utilizationLevel>, string> = {
+  ok: "bg-primary",
+  warning: "bg-amber-500",
+  over: "bg-destructive",
+};
+
+export function CardItem({
+  card,
+  utilization,
+}: {
+  card: CardView;
+  utilization?: CardUtilization;
+}) {
   // Banco conocido → color de fondo de marca; "Otro"/sin banco → neutro.
   const bank = findBank(card.bank);
 
@@ -57,6 +79,33 @@ export function CardItem({ card }: { card: CardModel }) {
             </p>
             <p>Vto. tarjeta: {formatExpiration(card.expirationDate)}</p>
           </>
+        )}
+
+        {/* Utilización del límite: cuánto de la tarjeta está comprometido en cuotas. */}
+        {utilization && (
+          <div className="mt-1 grid gap-1">
+            <div className="flex items-center justify-between text-xs">
+              <span>Límite {utilization.currency}</span>
+              <span className="text-foreground font-medium">
+                {utilization.percent.toLocaleString("es-AR")}% usado
+              </span>
+            </div>
+            <div
+              className="bg-muted h-1.5 overflow-hidden rounded-full"
+              role="progressbar"
+              aria-valuenow={Math.round(utilization.percent)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className={cn("h-full rounded-full", BAR_CLASS[utilizationLevel(utilization.percent)])}
+                style={{ width: `${Math.min(utilization.percent, 100)}%` }}
+              />
+            </div>
+            <p className="text-xs">
+              {utilization.usedLabel} de {utilization.limitLabel}
+            </p>
+          </div>
         )}
       </CardContent>
 

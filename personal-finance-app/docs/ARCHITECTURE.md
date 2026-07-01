@@ -56,6 +56,7 @@ model Card {
   closingDay Int        // día del mes de cierre (1-31)
   dueDay     Int        // día del mes de vencimiento (1-31)
   currencies String[]   @default(["ARS"]) // monedas que opera la tarjeta (ARS y/o USD)
+  creditLimitCents BigInt? // límite de crédito (centavos, moneda principal = currencies[0]); solo crédito
   isActive   Boolean    @default(true)
   createdAt  DateTime   @default(now())
 
