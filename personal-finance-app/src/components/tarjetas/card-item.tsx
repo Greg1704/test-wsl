@@ -36,8 +36,15 @@ export function CardItem({ card }: { card: CardModel }) {
           {card.bank && <span className="text-foreground font-medium">{card.bank}</span>}
           {card.brand && <span>{card.brand}</span>}
           {card.last4 && <span>•••• {card.last4}</span>}
-          <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground">
-            {card.currency}
+          <span className="ml-auto flex gap-1">
+            {card.currencies.map((c) => (
+              <span
+                key={c}
+                className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground"
+              >
+                {c}
+              </span>
+            ))}
           </span>
         </div>
         {card.owner && <p>Dueño: {card.owner}</p>}

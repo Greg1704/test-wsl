@@ -39,6 +39,7 @@ import { prisma } from "@/server/db";
 import {
   createCard,
   getCardById,
+  updateCard,
   deactivateCard,
   reactivateCard,
   renewCard,
@@ -95,7 +96,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
         expiration: "08/27",
         closingDay: 20,
         dueDay: 10,
-        currency: "ARS",
+        currencies: ["ARS"],
         userId: USER_A, // intento malicioso: debe ser ignorado
       });
 
@@ -121,11 +122,71 @@ describe("autorización cross-user (RNF-1.1)", () => {
         expiration: "08/27",
         closingDay: 20,
         dueDay: 10,
-        currency: "ARS",
+        currencies: ["ARS"],
       });
 
       expect(result.status).toBe("duplicate");
       expect(vi.mocked(prisma.card.create)).not.toHaveBeenCalled();
+    });
+
+    it("updateCard bloquea quitar una moneda con cuotas pendientes en esa moneda", async () => {
+      asUser(USER_A);
+      vi.mocked(prisma.card.findFirst).mockResolvedValue({
+        id: CARD_OF_A,
+        currencies: ["ARS", "USD"],
+      } as never);
+      // Quedan cuotas pendientes en ARS: no se puede sacar ARS.
+      vi.mocked(prisma.installment.groupBy).mockResolvedValue([
+        { currency: "ARS", _count: { _all: 3 } },
+      ] as never);
+
+      await expect(
+        updateCard(CARD_OF_A, {
+          type: "CREDIT",
+          name: "Visa Galicia",
+          bank: "Galicia",
+          last4: "1234",
+          expiration: "08/30",
+          closingDay: 20,
+          dueDay: 10,
+          currencies: ["USD"], // se quita ARS
+        })
+      ).rejects.toThrow(/pendiente/i);
+      // El conteo va scopeado por userId y por la moneda removida.
+      expect(vi.mocked(prisma.installment.groupBy)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: { not: "PAID" },
+            currency: { in: ["ARS"] },
+            purchase: { cardId: CARD_OF_A, userId: USER_A },
+          }),
+        })
+      );
+      expect(vi.mocked(prisma.card.updateMany)).not.toHaveBeenCalled();
+    });
+
+    it("updateCard permite quitar una moneda sin cuotas pendientes", async () => {
+      asUser(USER_A);
+      vi.mocked(prisma.card.findFirst).mockResolvedValue({
+        id: CARD_OF_A,
+        currencies: ["ARS", "USD"],
+      } as never);
+      vi.mocked(prisma.installment.groupBy).mockResolvedValue([] as never);
+      vi.mocked(prisma.card.updateMany).mockResolvedValue({ count: 1 } as never);
+
+      await updateCard(CARD_OF_A, {
+        type: "CREDIT",
+        name: "Visa Galicia",
+        bank: "Galicia",
+        last4: "1234",
+        expiration: "08/30",
+        closingDay: 20,
+        dueDay: 10,
+        currencies: ["USD"],
+      });
+      expect(vi.mocked(prisma.card.updateMany)).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: CARD_OF_A, userId: USER_A } })
+      );
     });
 
     it("getCardById de B no puede leer una tarjeta de A (query scopeada al userId de sesión)", async () => {
@@ -252,7 +313,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
       vi.mocked(prisma.card.findFirst).mockResolvedValue({
         id: CARD_OF_A,
         type: "CREDIT",
-        currency: "ARS",
+        currencies: ["ARS"],
       } as never);
 
       await expect(
@@ -267,6 +328,31 @@ describe("autorización cross-user (RNF-1.1)", () => {
         })
       ).rejects.toThrow("Tipo de tarjeta inválido");
       expect(vi.mocked(prisma.purchase.create)).not.toHaveBeenCalled();
+    });
+
+    it("createPurchase rechaza una moneda que la tarjeta no opera (no abre transacción)", async () => {
+      asUser(USER_A);
+      // Tarjeta que solo opera ARS; la compra pide USD.
+      vi.mocked(prisma.card.findFirst).mockResolvedValue({
+        id: CARD_OF_A,
+        type: "CREDIT",
+        currencies: ["ARS"],
+        closingDay: 20,
+        dueDay: 10,
+      } as never);
+
+      await expect(
+        createPurchase({
+          paymentMethod: "CREDIT",
+          cardId: CARD_OF_A,
+          description: "Compra en dólares",
+          totalAmount: 100,
+          currency: "USD",
+          totalInstallments: 3,
+          purchaseDate: new Date(2026, 0, 15),
+        })
+      ).rejects.toThrow("no opera en esa moneda");
+      expect(vi.mocked(prisma.$transaction)).not.toHaveBeenCalled();
     });
 
     it("getPurchaseById de B no puede leer una compra de A", async () => {

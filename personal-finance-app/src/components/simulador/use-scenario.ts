@@ -16,6 +16,10 @@ export type Scenario = {
   form: UseFormReturn<SimulatorFormValues>;
   selectedCard: SimCard | undefined;
   currency: string;
+  /** Monedas que opera la tarjeta elegida (para el select de moneda del form). */
+  currencyOptions: string[];
+  /** Cambia la moneda del plan (debe ser una de `currencyOptions`). */
+  setCurrency: (c: string) => void;
   plan: PurchasePlan | null;
   impact: SimulationImpact | null;
 };
@@ -45,9 +49,20 @@ export function useScenario(cards: SimCard[], ctx: ScenarioContext): Scenario {
   const totalInstallments = useWatch({ control: form.control, name: "totalInstallments" });
   const financedTotal = useWatch({ control: form.control, name: "financedTotal" });
   const purchaseDate = useWatch({ control: form.control, name: "purchaseDate" });
+  const currencyValue = useWatch({ control: form.control, name: "currency" });
 
   const selectedCard = cards.find((c) => c.id === cardId);
-  const currency = selectedCard?.currency ?? defaultCurrency;
+  const currencyOptions = selectedCard?.currencies ?? [];
+  // Default = la moneda principal del usuario (Configuración) si la tarjeta la opera;
+  // si no, la primera de la tarjeta. Si el usuario ya eligió una válida, se respeta.
+  const preferred = currencyOptions.includes(defaultCurrency)
+    ? defaultCurrency
+    : currencyOptions[0];
+  const currency =
+    currencyValue && currencyOptions.includes(currencyValue)
+      ? currencyValue
+      : (preferred ?? defaultCurrency);
+  const setCurrency = (c: string) => form.setValue("currency", c as "ARS" | "USD");
 
   const plan = useMemo(() => {
     if (!selectedCard || !totalAmount || totalAmount <= 0) return null;
@@ -59,12 +74,12 @@ export function useScenario(cards: SimCard[], ctx: ScenarioContext): Scenario {
         totalInstallments: totalInstallments || 1,
         totalAmountCents: currencyToCents(totalAmount),
         financedTotalCents: financedTotal ? currencyToCents(financedTotal) : undefined,
-        currency: selectedCard.currency,
+        currency,
       });
     } catch {
       return null;
     }
-  }, [selectedCard, totalAmount, totalInstallments, financedTotal, purchaseDate]);
+  }, [selectedCard, totalAmount, totalInstallments, financedTotal, purchaseDate, currency]);
 
   const impact = useMemo(() => {
     if (!plan || !selectedCard) return null;
@@ -86,5 +101,5 @@ export function useScenario(cards: SimCard[], ctx: ScenarioContext): Scenario {
     });
   }, [plan, selectedCard, baselines, currency, monthLabels, startYear, startMonth, income, defaultCurrency]);
 
-  return { form, selectedCard, currency, plan, impact };
+  return { form, selectedCard, currency, currencyOptions, setCurrency, plan, impact };
 }

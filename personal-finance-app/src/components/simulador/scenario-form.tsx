@@ -10,6 +10,7 @@ import { formatDate, startOfToday } from "@/server/lib/dates";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
@@ -43,6 +44,9 @@ type ScenarioFormProps = {
   cards: SimCard[];
   plan: PurchasePlan | null;
   currency: string;
+  /** Monedas que opera la tarjeta elegida; si hay más de una, se muestra el select. */
+  currencyOptions: string[];
+  onCurrencyChange: (c: string) => void;
   title?: string;
   description?: string;
   /** Si se pasa, muestra una X para quitar este escenario (escenario B). */
@@ -54,6 +58,8 @@ export function ScenarioForm({
   cards,
   plan,
   currency,
+  currencyOptions,
+  onCurrencyChange,
   title = "Compra hipotética",
   description = "Elegí la tarjeta, el monto y las cuotas; calculamos el impacto al instante.",
   onRemove,
@@ -97,7 +103,7 @@ export function ScenarioForm({
                     <SelectContent>
                       {cards.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
-                          {c.name} · {c.bank} ···· {c.last4} ({c.currency})
+                          {c.name} · {c.bank} ···· {c.last4} ({c.currencies.join("/")})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -106,6 +112,25 @@ export function ScenarioForm({
                 </FormItem>
               )}
             />
+
+            {/* Solo si la tarjeta opera más de una moneda: el usuario elige cuál simular. */}
+            {currencyOptions.length > 1 && (
+              <div className="grid gap-2">
+                <Label>Moneda</Label>
+                <Select value={currency} onValueChange={onCurrencyChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencyOptions.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c === "ARS" ? "ARS (pesos)" : "USD (dólares)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 items-start gap-4">
               <FormField

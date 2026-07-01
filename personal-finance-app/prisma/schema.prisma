@@ -88,7 +88,10 @@ model Card {
   expirationDate DateTime? @db.Date // vencimiento de la tarjeta (fin del mes MM/AA)
   closingDay     Int?
   dueDay         Int?
-  currency       String    @default("ARS")
+  // Monedas que opera la tarjeta. En AR un mismo plástico suele tener resumen en ARS
+  // y en USD bajo el MISMO ciclo (cierre/vencimiento). La compra elige entre estas;
+  // cada Installment/Purchase guarda su propia `currency`. Al menos una (validado en Zod).
+  currencies     String[]  @default(["ARS"])
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
 

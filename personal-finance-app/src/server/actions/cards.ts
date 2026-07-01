@@ -107,6 +107,35 @@ export async function updateCard(id: string, input: unknown) {
   const user = await requireUser();
   const parsed = cardSchema.parse(input);
 
+  // La tarjeta debe existir y ser del usuario (findFirst scopeado por userId).
+  const existing = await prisma.card.findFirst({ where: { id, userId: user.id } });
+  if (!existing) {
+    throw new Error("Tarjeta no encontrada");
+  }
+
+  // No se puede quitar una moneda que todavía tiene cuotas PENDIENTES en esa moneda:
+  // seguiría comprometiendo flujo a futuro (mismo criterio que deactivateCard). Las
+  // cuotas guardan su propia `currency`, así que el conteo va por moneda removida.
+  const kept = new Set<string>(parsed.currencies);
+  const removed = existing.currencies.filter((c) => !kept.has(c));
+  if (removed.length > 0) {
+    const pending = await prisma.installment.groupBy({
+      by: ["currency"],
+      where: {
+        status: { not: "PAID" },
+        currency: { in: removed },
+        purchase: { cardId: id, userId: user.id },
+      },
+      _count: { _all: true },
+    });
+    if (pending.length > 0) {
+      const detail = pending.map((p) => `${p._count._all} cuota(s) en ${p.currency}`).join(", ");
+      throw new Error(
+        `No podés quitar esa moneda: la tarjeta tiene ${detail} pendiente(s) de pago.`
+      );
+    }
+  }
+
   // updateMany filtra por userId: el usuario A no puede editar la tarjeta de B.
   const { count } = await prisma.card.updateMany({
     where: { id, userId: user.id },

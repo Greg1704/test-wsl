@@ -10,7 +10,7 @@ const baseProps: SimulatorClientProps = {
       name: "Visa Galicia",
       bank: "Galicia",
       last4: "1234",
-      currency: "ARS",
+      currencies: ["ARS"],
       closingDay: 20,
       dueDay: 10,
     },
@@ -21,6 +21,24 @@ const baseProps: SimulatorClientProps = {
   defaultCurrency: "ARS",
   income: 500000,
   baselines: [], // sin cuotas reales: el cliente sintetiza un baseline en cero
+};
+
+// Tarjeta que opera dos monedas: habilita el selector de moneda del plan. El array
+// arranca con USD a propósito para verificar que el default NO es currencies[0] sino
+// la moneda principal del usuario (defaultCurrency = "ARS" en baseProps).
+const multiCurrencyProps: SimulatorClientProps = {
+  ...baseProps,
+  cards: [
+    {
+      id: "card_amex",
+      name: "Amex Multi",
+      bank: "Santander",
+      last4: "0042",
+      currencies: ["USD", "ARS"],
+      closingDay: 15,
+      dueDay: 28,
+    },
+  ],
 };
 
 describe("SimulatorClient", () => {
@@ -50,6 +68,32 @@ describe("SimulatorClient", () => {
     // Aparece el detalle mes a mes (la tabla de impacto) con sus columnas.
     expect(screen.getByText("Detalle mes a mes")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Después" })).toBeInTheDocument();
+  });
+
+  it("con una tarjeta multi-moneda, aparece el selector de moneda con ARS y USD", async () => {
+    render(<SimulatorClient {...multiCurrencyProps} />);
+    // Sin tarjeta elegida todavía no hay selector de moneda.
+    expect(screen.queryByText("Moneda")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByRole("option", { name: /Amex Multi/ }));
+
+    // Al elegir la tarjeta multi-moneda aparece el selector (segundo combobox), con la
+    // moneda principal del usuario (ARS) como default aunque no sea la primera del array.
+    expect(screen.getByText("Moneda")).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox")[1]).toHaveTextContent("ARS (pesos)");
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
+    expect(
+      await screen.findByRole("option", { name: "USD (dólares)" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "ARS (pesos)" })).toBeInTheDocument();
+  });
+
+  it("una tarjeta de una sola moneda NO muestra el selector de moneda", async () => {
+    render(<SimulatorClient {...baseProps} />);
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByRole("option", { name: /Visa Galicia/ }));
+    expect(screen.queryByText("Moneda")).not.toBeInTheDocument();
   });
 
   it("activar 'Comparar' revela Plan A y Plan B", () => {

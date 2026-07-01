@@ -104,7 +104,7 @@ async function main() {
           last4: c.last4,
           closingDay: c.closingDay,
           dueDay: c.dueDay,
-          currency: c.currency,
+          currencies: [c.currency],
           // Vencimiento de la tarjeta: fin de mes (convención del modelo).
           expirationDate: new Date(c.exp[0], c.exp[1] + 1, 0),
         },

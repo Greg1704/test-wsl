@@ -6,7 +6,7 @@ export type SimCard = {
   name: string;
   bank: string | null;
   last4: string | null;
-  currency: string;
+  currencies: string[];
   closingDay: number;
   dueDay: number;
 };

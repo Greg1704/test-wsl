@@ -42,9 +42,13 @@ export async function createPurchase(input: unknown) {
     }
   }
 
-  // La moneda la fija la tarjeta cuando hay (crédito/débito); para transferencia y
-  // efectivo, la que eligió el usuario en el form.
-  const currency = card?.currency ?? data.currency;
+  // Moneda de la compra: la que eligió el usuario. Con tarjeta debe ser una de las que
+  // la tarjeta opera (una tarjeta puede tener ARS y USD). La Server Action es un endpoint
+  // público: no alcanza con restringir el select en el cliente, se valida acá.
+  const currency = data.currency;
+  if (card && !card.currencies.includes(currency)) {
+    throw new Error("La tarjeta no opera en esa moneda");
+  }
   const originalCents = currencyToCents(data.totalAmount);
 
   // GASTO NO-CRÉDITO (débito/transferencia/efectivo): pago único en `purchaseDate`,

@@ -69,7 +69,7 @@ export default async function SimuladorPage() {
     name: c.name,
     bank: c.bank,
     last4: c.last4,
-    currency: c.currency,
+    currencies: c.currencies,
     // Filtradas a crédito arriba ⇒ ciclo no nulo.
     closingDay: c.closingDay!,
     dueDay: c.dueDay!,

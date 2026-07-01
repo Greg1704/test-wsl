@@ -8,7 +8,7 @@ const base = {
   last4: "1234",
   closingDay: 20,
   dueDay: 10,
-  currency: "ARS" as const,
+  currencies: ["ARS"] as const,
 };
 
 describe("cardSchema — vencimiento", () => {
@@ -40,5 +40,27 @@ describe("cardSchema — vencimiento", () => {
   it("reporta formato inválido sin romper", () => {
     const result = cardSchema.safeParse({ ...base, expiration: "13/99" });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("cardSchema — monedas", () => {
+  const credit = { ...base, expiration: "08/30" };
+
+  it("acepta una tarjeta multi-moneda (ARS y USD)", () => {
+    const result = cardSchema.safeParse({ ...credit, currencies: ["ARS", "USD"] });
+    expect(result.success).toBe(true);
+    expect(result.data?.currencies).toEqual(["ARS", "USD"]);
+  });
+
+  it("rechaza una tarjeta sin monedas", () => {
+    const result = cardSchema.safeParse({ ...credit, currencies: [] });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toMatch(/al menos una moneda/i);
+  });
+
+  it("deduplica monedas repetidas", () => {
+    const result = cardSchema.safeParse({ ...credit, currencies: ["ARS", "ARS"] });
+    expect(result.success).toBe(true);
+    expect(result.data?.currencies).toEqual(["ARS"]);
   });
 });

@@ -56,17 +56,19 @@ const NO_CATEGORY = "__none__";
 // en la página, el serializador de Next (dev) deja de renderizar algunas.
 export type PurchaseFormCard = Pick<
   Card,
-  "id" | "type" | "name" | "bank" | "last4" | "currency" | "closingDay" | "dueDay"
+  "id" | "type" | "name" | "bank" | "last4" | "currencies" | "closingDay" | "dueDay"
 >;
 export type PurchaseFormCategory = Pick<Category, "id" | "name">;
 
 type Props = {
   cards: PurchaseFormCard[];
   categories: PurchaseFormCategory[];
+  /** Moneda principal del usuario (Configuración): default de la compra. */
+  defaultCurrency: "ARS" | "USD";
   trigger: React.ReactNode;
 };
 
-export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
+export function PurchaseFormDialog({ cards, categories, defaultCurrency, trigger }: Props) {
   const [open, setOpen] = useState(false);
 
   const creditCards = cards.filter((c) => c.type === "CREDIT");
@@ -79,7 +81,7 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
     description: "",
     merchant: "",
     totalAmount: undefined as unknown as number,
-    currency: "ARS",
+    currency: defaultCurrency,
     totalInstallments: 1,
     purchaseDate: new Date(),
     financedTotal: undefined,
@@ -106,15 +108,22 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
       form.setValue("financedTotal", undefined);
     }
     if (value === "TRANSFER" || value === "CASH") {
-      form.setValue("currency", "ARS");
+      form.setValue("currency", defaultCurrency);
     }
   }
 
-  // La compra hereda la moneda de la tarjeta elegida (crédito/débito).
+  // Al elegir tarjeta, la moneda default es la principal del usuario si la tarjeta la
+  // opera; si no, la primera de la tarjeta. Con varias (ej. ARS y USD) se puede cambiar
+  // en el select.
   function onCardChange(cardId: string) {
     form.setValue("cardId", cardId);
     const card = cards.find((c) => c.id === cardId);
-    if (card) form.setValue("currency", card.currency as "ARS" | "USD");
+    if (card) {
+      const preferred = card.currencies.includes(defaultCurrency)
+        ? defaultCurrency
+        : (card.currencies[0] as "ARS" | "USD");
+      form.setValue("currency", preferred);
+    }
   }
 
   // Preview en vivo de las cuotas (solo crédito). Reusa la lógica pura de dominio.
@@ -123,12 +132,25 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
   const totalInstallments = useWatch({ control: form.control, name: "totalInstallments" });
   const financedTotal = useWatch({ control: form.control, name: "financedTotal" });
   const purchaseDate = useWatch({ control: form.control, name: "purchaseDate" });
+  const currency = useWatch({ control: form.control, name: "currency" });
+
+  // Monedas elegibles: con tarjeta, las que opera la tarjeta seleccionada; para
+  // transferencia/efectivo, ARS o USD libres. Si la tarjeta opera una sola, el select
+  // queda deshabilitado (la moneda ya quedó fijada por onCardChange).
+  const selectedCard = cards.find((c) => c.id === cardId);
+  const currencyOptions: ("ARS" | "USD")[] = needsCard
+    ? ((selectedCard?.currencies as ("ARS" | "USD")[]) ?? [])
+    : ["ARS", "USD"];
 
   const preview = useMemo(() => {
     if (!isCredit) return null;
     const card = creditCards.find((c) => c.id === cardId);
     if (!card || card.closingDay == null || card.dueDay == null) return null;
     if (!totalAmount || totalAmount <= 0) return null;
+    // Moneda del preview: la elegida si la tarjeta la opera, si no la primera.
+    const previewCurrency = currency && card.currencies.includes(currency)
+      ? currency
+      : card.currencies[0];
     try {
       const plan = buildPurchasePlan({
         cardClosingDay: card.closingDay,
@@ -137,13 +159,22 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
         totalInstallments: totalInstallments || 1,
         totalAmountCents: currencyToCents(totalAmount),
         financedTotalCents: financedTotal ? currencyToCents(financedTotal) : undefined,
-        currency: card.currency,
+        currency: previewCurrency,
       });
-      return { ...plan, currency: card.currency };
+      return { ...plan, currency: previewCurrency };
     } catch {
       return null;
     }
-  }, [isCredit, creditCards, cardId, totalAmount, totalInstallments, financedTotal, purchaseDate]);
+  }, [
+    isCredit,
+    creditCards,
+    cardId,
+    totalAmount,
+    totalInstallments,
+    financedTotal,
+    purchaseDate,
+    currency,
+  ]);
 
   async function onSubmit(raw: PurchaseFormValues) {
     // Los opcionales vacíos se mandan como undefined (no como "").
@@ -235,7 +266,7 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
                         <SelectContent>
                           {methodCards.map((c) => (
                             <SelectItem key={c.id} value={c.id}>
-                              {c.name} · {c.bank} ···· {c.last4} ({c.currency})
+                              {c.name} · {c.bank} ···· {c.last4} ({c.currencies.join("/")})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -297,8 +328,9 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      // En crédito/débito la moneda la fija la tarjeta elegida.
-                      disabled={needsCard}
+                      // Con tarjeta de una sola moneda, la fija la tarjeta. Con varias
+                      // (ej. ARS y USD), el usuario elige entre las que opera.
+                      disabled={needsCard && currencyOptions.length <= 1}
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -306,8 +338,11 @@ export function PurchaseFormDialog({ cards, categories, trigger }: Props) {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="ARS">ARS (pesos)</SelectItem>
-                        <SelectItem value="USD">USD (dólares)</SelectItem>
+                        {currencyOptions.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c === "ARS" ? "ARS (pesos)" : "USD (dólares)"}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

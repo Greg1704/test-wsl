@@ -55,7 +55,7 @@ model Card {
   last4      String?    // SOLO los últimos 4 dígitos
   closingDay Int        // día del mes de cierre (1-31)
   dueDay     Int        // día del mes de vencimiento (1-31)
-  currency   String     @default("ARS")
+  currencies String[]   @default(["ARS"]) // monedas que opera la tarjeta (ARS y/o USD)
   isActive   Boolean    @default(true)
   createdAt  DateTime   @default(now())
 
@@ -140,6 +140,22 @@ model ExchangeRate {
   @@index([userId])
 }
 ```
+
+### Tarjetas multi-moneda (`Card.currencies`)
+
+En Argentina un mismo plástico suele tener un resumen en **ARS** y otro en **USD** bajo
+el **mismo ciclo** (cierre/vencimiento): las compras locales caen en el resumen de pesos
+y las del exterior/en dólares en el de dólares. Por eso `Card.currency` (valor único)
+pasó a `Card.currencies` (`String[]`, al menos una): la tarjeta declara las monedas que
+opera y la **compra elige entre ellas** (antes la moneda la fijaba la tarjeta). Aplica a
+crédito y débito.
+
+- **El ciclo es compartido** entre monedas ⇒ `generateInstallments` y toda la proyección
+  quedan iguales. El motor ya era multi-moneda: cada `Installment`/`Purchase` guarda su
+  propia `currency` y el dashboard/savings bucketean por moneda.
+- **Validación server (`createPurchase`):** la moneda de la compra debe pertenecer a
+  `card.currencies` (la Server Action es un endpoint público; no alcanza con restringir el
+  select del cliente). Sin tarjeta (transferencia/efectivo) la moneda es libre (ARS/USD).
 
 ## Lógica clave: generar cuotas
 
@@ -412,7 +428,7 @@ En Vercel → *Project Settings → Environment Variables* (marcadas para *Produ
 | `DATABASE_URL` | endpoint **pooled** de Neon | runtime (lo usa el adapter) |
 | `DIRECT_URL` | endpoint **directo** de Neon | migraciones (`prisma migrate deploy`) |
 | `BETTER_AUTH_SECRET` | `openssl rand -base64 32` (uno nuevo, distinto al de dev) | sesiones |
-| `BETTER_AUTH_URL` | URL de producción (ej. `https://cuotapp.vercel.app`) | Better Auth |
+| `BETTER_AUTH_URL` | URL de producción (`https://cuotapp.gfirm.dev`) | Better Auth |
 | `NEXT_PUBLIC_APP_URL` | misma URL de producción | auth client en el browser |
 
 `prisma.config.ts` debe usar `DIRECT_URL` para migrar, con fallback a `DATABASE_URL` en dev

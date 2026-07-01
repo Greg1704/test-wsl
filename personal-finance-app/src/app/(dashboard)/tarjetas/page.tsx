@@ -1,5 +1,7 @@
 import { CreditCard } from "lucide-react";
 
+import { requireUser } from "@/server/auth/session";
+import { prisma } from "@/server/db";
 import {
   listActiveCards,
   listExpiredCards,
@@ -14,13 +16,17 @@ import { RenewCardDialog } from "@/components/tarjetas/renew-card-dialog";
 
 export default async function TarjetasPage() {
   // Server Component: lee la DB directo, sin fetch ni API intermedia.
-  const [active, expired, deactivated] = await Promise.all([
+  const user = await requireUser();
+  const [active, expired, deactivated, profile] = await Promise.all([
     listActiveCards(),
     listExpiredCards(),
     listDeactivatedCards(),
+    prisma.user.findUnique({ where: { id: user.id }, select: { defaultCurrency: true } }),
   ]);
 
   const hasAny = active.length + expired.length + deactivated.length > 0;
+  // Moneda principal del usuario (Configuración): preselección en el alta de tarjeta.
+  const defaultCurrency: "ARS" | "USD" = profile?.defaultCurrency === "USD" ? "USD" : "ARS";
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 py-10">
@@ -33,7 +39,10 @@ export default async function TarjetasPage() {
         </div>
         <div className="flex items-center gap-2">
           {deactivated.length > 0 && <DeactivatedCardsDialog cards={deactivated} />}
-          <CardFormDialog trigger={<Button>+ Nueva tarjeta</Button>} />
+          <CardFormDialog
+            defaultCurrency={defaultCurrency}
+            trigger={<Button>+ Nueva tarjeta</Button>}
+          />
         </div>
       </header>
 
@@ -46,7 +55,10 @@ export default async function TarjetasPage() {
               Agregá tu primera tarjeta para empezar a cargar compras en cuotas.
             </p>
           </div>
-          <CardFormDialog trigger={<Button>+ Nueva tarjeta</Button>} />
+          <CardFormDialog
+            defaultCurrency={defaultCurrency}
+            trigger={<Button>+ Nueva tarjeta</Button>}
+          />
         </div>
       ) : (
         <>

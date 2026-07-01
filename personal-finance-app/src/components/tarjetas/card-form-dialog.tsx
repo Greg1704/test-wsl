@@ -25,6 +25,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -51,11 +52,16 @@ function maskExpiration(value: string): string {
 type Props = {
   /** Si viene una tarjeta, el dialog opera en modo edición; si no, en modo alta. */
   card?: Card;
+  /**
+   * Moneda principal del usuario (Configuración). En el alta preselecciona esta moneda
+   * entre las que opera la tarjeta. Solo aplica al crear (en edición manda `card`).
+   */
+  defaultCurrency?: "ARS" | "USD";
   /** El elemento que dispara la apertura (botón "Nueva tarjeta" o "Editar"). */
   trigger: React.ReactNode;
 };
 
-export function CardFormDialog({ card, trigger }: Props) {
+export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props) {
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(card);
 
@@ -83,7 +89,7 @@ export function CardFormDialog({ card, trigger }: Props) {
     expiration: card ? formatExpiration(card.expirationDate) : "",
     closingDay: card?.closingDay ?? 1,
     dueDay: card?.dueDay ?? 1,
-    currency: (card?.currency as "ARS" | "USD") ?? "ARS",
+    currencies: (card?.currencies as ("ARS" | "USD")[]) ?? [defaultCurrency],
   };
 
   const form = useForm<CardFormValues>({
@@ -125,8 +131,12 @@ export function CardFormDialog({ card, trigger }: Props) {
       }
       toast.success("Tarjeta creada");
       resetAndClose();
-    } catch {
-      toast.error("No pudimos guardar la tarjeta. Intentá de nuevo.");
+    } catch (e) {
+      // El server puede lanzar un mensaje propio (ej. hay cuotas pendientes en una
+      // moneda que se intenta quitar). Lo mostramos tal cual en vez del genérico.
+      toast.error(
+        e instanceof Error ? e.message : "No pudimos guardar la tarjeta. Intentá de nuevo."
+      );
     }
   }
 
@@ -465,24 +475,43 @@ export function CardFormDialog({ card, trigger }: Props) {
 
               <FormField
                 control={form.control}
-                name="currency"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Moneda</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="ARS">ARS (pesos)</SelectItem>
-                        <SelectItem value="USD">USD (dólares)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                name="currencies"
+                render={({ field }) => {
+                  const toggle = (c: "ARS" | "USD") => {
+                    const set = new Set(field.value ?? []);
+                    // No dejar la lista vacía: si es la única moneda, no la quita.
+                    if (set.has(c) && set.size === 1) return;
+                    if (set.has(c)) set.delete(c);
+                    else set.add(c);
+                    field.onChange(Array.from(set));
+                  };
+                  return (
+                    <FormItem>
+                      <FormLabel>Monedas</FormLabel>
+                      <div className="flex gap-2">
+                        {(["ARS", "USD"] as const).map((c) => {
+                          const active = field.value?.includes(c);
+                          return (
+                            <Button
+                              key={c}
+                              type="button"
+                              variant={active ? "default" : "outline"}
+                              onClick={() => toggle(c)}
+                              aria-pressed={active}
+                            >
+                              {c === "ARS" ? "ARS (pesos)" : "USD (dólares)"}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <FormDescription>
+                        Una tarjeta puede operar en más de una moneda (mismo ciclo de
+                        cierre/vencimiento). La compra elige entre estas.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               <DialogFooter>

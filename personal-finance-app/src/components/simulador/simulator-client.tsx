@@ -53,6 +53,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             cards={cards}
             plan={a.plan}
             currency={a.currency}
+            currencyOptions={a.currencyOptions}
+            onCurrencyChange={a.setCurrency}
             title="Plan A"
             description="Tarjeta, monto y cuotas de este plan."
           />
@@ -61,6 +63,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             cards={cards}
             plan={b.plan}
             currency={b.currency}
+            currencyOptions={b.currencyOptions}
+            onCurrencyChange={b.setCurrency}
             title="Plan B"
             description="El plan a comparar contra A."
             onRemove={() => setComparing(false)}
@@ -73,6 +77,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             cards={cards}
             plan={a.plan}
             currency={a.currency}
+            currencyOptions={a.currencyOptions}
+            onCurrencyChange={a.setCurrency}
           />
           <Button
             type="button"

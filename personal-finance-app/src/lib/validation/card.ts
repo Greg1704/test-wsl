@@ -29,7 +29,12 @@ export const cardSchema = z
     expiration: z.string().optional(),
     closingDay: z.number().int().min(1, "Día inválido").max(31, "Día inválido").optional(),
     dueDay: z.number().int().min(1, "Día inválido").max(31, "Día inválido").optional(),
-    currency: z.enum(["ARS", "USD"]),
+    // Una tarjeta opera al menos una moneda; puede tener ARS y USD (mismo ciclo).
+    // Deduplicamos por si el form manda repetidos.
+    currencies: z
+      .array(z.enum(["ARS", "USD"]))
+      .min(1, "Elegí al menos una moneda")
+      .transform((v) => Array.from(new Set(v))),
   })
   .superRefine((data, ctx) => {
     if (data.type !== "CREDIT") return; // el débito no tiene ciclo ni vencimiento

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
 
+import { requireUser } from "@/server/auth/session";
+import { prisma } from "@/server/db";
 import { listPurchases } from "@/server/actions/purchases";
 import { listActiveCards } from "@/server/actions/cards";
 import { listCategories } from "@/server/actions/categories";
@@ -56,12 +58,17 @@ export default async function ComprasPage({
 
   // Server Component: lee la DB directo. El dinero se formatea acá (server),
   // así ningún BigInt cruza el borde hacia el cliente.
-  const [purchasesResult, cards, categories] = await Promise.all([
+  const user = await requireUser();
+  const [purchasesResult, cards, categories, profile] = await Promise.all([
     listPurchases(filters),
     listActiveCards(),
     listCategories(),
+    prisma.user.findUnique({ where: { id: user.id }, select: { defaultCurrency: true } }),
   ]);
   const { purchases, page, pageCount, total } = purchasesResult;
+  // Moneda principal del usuario (Configuración): default de la compra cuando la
+  // tarjeta elegida la opera. Ver PurchaseFormDialog.
+  const defaultCurrency: "ARS" | "USD" = profile?.defaultCurrency === "USD" ? "USD" : "ARS";
 
   // URL de una página preservando los filtros activos (la paginación no los pierde).
   const pageHref = (n: number) => {
@@ -85,7 +92,7 @@ export default async function ComprasPage({
     name: c.name,
     bank: c.bank,
     last4: c.last4,
-    currency: c.currency,
+    currencies: c.currencies,
     closingDay: c.closingDay,
     dueDay: c.dueDay,
   }));
@@ -106,6 +113,7 @@ export default async function ComprasPage({
     <PurchaseFormDialog
       cards={dialogCards}
       categories={dialogCategories}
+      defaultCurrency={defaultCurrency}
       trigger={<Button>+ Nueva compra</Button>}
     />
   );

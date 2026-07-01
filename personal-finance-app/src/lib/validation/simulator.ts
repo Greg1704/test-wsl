@@ -3,11 +3,14 @@ import { z } from "zod";
 /**
  * Inputs del simulador (Fase 4, RF-8.1): una compra hipotética que NO se persiste.
  * Solo lo que afecta el flujo de cuotas — sin descripción/categoría/comercio, que
- * son datos de registro, no de simulación. La moneda se hereda de la tarjeta.
+ * son datos de registro, no de simulación. La moneda default es la primera de la
+ * tarjeta; si la tarjeta opera varias, el usuario la elige (debe ser una de ellas).
  */
 export const simulatorSchema = z
   .object({
     cardId: z.cuid({ error: "Elegí una tarjeta" }),
+    /** Moneda del plan. Vacío ⇒ se usa la primera de la tarjeta (ver useScenario). */
+    currency: z.enum(["ARS", "USD"]).optional(),
     totalAmount: z
       .number({ error: "Ingresá el monto" })
       .positive("El monto debe ser mayor a 0"),
