@@ -97,6 +97,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
         closingDay: 20,
         dueDay: 10,
         currencies: ["ARS"],
+        creditLimit: 2_000_000,
         userId: USER_A, // intento malicioso: debe ser ignorado
       });
 
@@ -123,6 +124,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
         closingDay: 20,
         dueDay: 10,
         currencies: ["ARS"],
+        creditLimit: 2_000_000,
       });
 
       expect(result.status).toBe("duplicate");
@@ -150,6 +152,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
           closingDay: 20,
           dueDay: 10,
           currencies: ["USD"], // se quita ARS
+          creditLimit: 2_000_000,
         })
       ).rejects.toThrow(/pendiente/i);
       // El conteo va scopeado por userId y por la moneda removida.
@@ -183,6 +186,7 @@ describe("autorización cross-user (RNF-1.1)", () => {
         closingDay: 20,
         dueDay: 10,
         currencies: ["USD"],
+        creditLimit: 2_000_000,
       });
       expect(vi.mocked(prisma.card.updateMany)).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: CARD_OF_A, userId: USER_A } })

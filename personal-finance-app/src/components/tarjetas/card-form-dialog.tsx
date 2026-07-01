@@ -5,7 +5,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
-import type { Card } from "@/generated/prisma/client";
+import type { CardView } from "@/lib/card-view";
 import { cn } from "@/lib/utils";
 import { cardSchema, type CardFormValues } from "@/lib/validation/card";
 import { KNOWN_BANKS, OTHER_BANK, NEUTRAL_MODAL_CLASS, findBank } from "@/lib/banks";
@@ -51,7 +51,7 @@ function maskExpiration(value: string): string {
 
 type Props = {
   /** Si viene una tarjeta, el dialog opera en modo edición; si no, en modo alta. */
-  card?: Card;
+  card?: CardView;
   /**
    * Moneda principal del usuario (Configuración). En el alta preselecciona esta moneda
    * entre las que opera la tarjeta. Solo aplica al crear (en edición manda `card`).
@@ -67,7 +67,7 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
 
   // Si createCard detecta un duplicado, guardamos la tarjeta existente y los
   // valores ingresados para ofrecer reactivar / crear igual.
-  const [duplicate, setDuplicate] = useState<Card | null>(null);
+  const [duplicate, setDuplicate] = useState<CardView | null>(null);
   const [pendingValues, setPendingValues] = useState<CardFormValues | null>(null);
 
   // Opción elegida en el Select de banco: un banco conocido, "Otro", o "" (ninguno).
@@ -90,6 +90,10 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
     closingDay: card?.closingDay ?? 1,
     dueDay: card?.dueDay ?? 1,
     currencies: (card?.currencies as ("ARS" | "USD")[]) ?? [defaultCurrency],
+    // El límite viaja en centavos (string) y el form trabaja en unidades enteras.
+    // `null` (no `undefined`) para el vacío: con `undefined`, el Controller de RHF vuelve
+    // a caer en el defaultValue y "reinserta" el valor al intentar borrarlo.
+    creditLimit: card?.creditLimitCents ? Number(card.creditLimitCents) / 100 : null,
   };
 
   const form = useForm<CardFormValues>({
@@ -163,7 +167,7 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
   }
 
   // Mensaje y acciones del panel de duplicado según el estado de la existente.
-  function renderDuplicatePanel(existing: Card) {
+  function renderDuplicatePanel(existing: CardView) {
     const deactivated = !existing.isActive;
     const expired = existing.isActive && isCardExpired(existing.expirationDate);
 
@@ -471,6 +475,36 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
                   )}
                 />
               </div>
+              )}
+
+              {isCredit && (
+                <FormField
+                  control={form.control}
+                  name="creditLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Límite de crédito</FormLabel>
+                      <FormControl>
+                        <Input
+                          inputMode="numeric"
+                          placeholder="2000000"
+                          value={field.value ?? ""}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            // Vacío ⇒ `null` (no `undefined`), para poder borrar el campo
+                            // sin que RHF lo reinserte con el valor original.
+                            field.onChange(digits ? Number(digits) : null);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        En la moneda principal de la tarjeta. Habilita la barra de
+                        utilización (cuánto del límite está comprometido en cuotas).
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
 
               <FormField

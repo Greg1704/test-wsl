@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import type { Card } from "@/generated/prisma/client";
 import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
 import { cardSchema, renewCardSchema } from "@/lib/validation/card";
 import { parseExpiration, startOfToday } from "@/server/lib/dates";
+import { currencyToCents } from "@/server/lib/money";
+import { utilizationPercent } from "@/server/lib/card-utilization";
+import { toCardView, type CardView } from "@/lib/card-view";
 
 /**
  * Tarjetas vigentes: activas y sin vencer. El DÉBITO no tiene vencimiento, así que
@@ -48,22 +50,23 @@ export async function listDeactivatedCards() {
 }
 
 export type CreateCardResult =
-  | { status: "created"; card: Card }
-  | { status: "duplicate"; existing: Card };
+  | { status: "created" }
+  | { status: "duplicate"; existing: CardView };
 
 /**
  * Mapea los datos validados del form al `data` de Prisma. El DÉBITO no tiene ciclo de
- * facturación ni vencimiento: esos campos se persisten como `null`. El crédito convierte
- * el MM/AA a Date (fin de mes) y guarda cierre/vencimiento.
+ * facturación, vencimiento ni límite: esos campos se persisten como `null`. El crédito
+ * convierte el MM/AA a Date (fin de mes), el límite a centavos, y guarda cierre/vencimiento.
  */
 function toCardData(parsed: ReturnType<typeof cardSchema.parse>) {
-  const { expiration, closingDay, dueDay, ...rest } = parsed;
+  const { expiration, closingDay, dueDay, creditLimit, ...rest } = parsed;
   const isCredit = parsed.type === "CREDIT";
   return {
     ...rest,
     closingDay: isCredit ? closingDay : null,
     dueDay: isCredit ? dueDay : null,
     expirationDate: isCredit && expiration ? parseExpiration(expiration) : null,
+    creditLimitCents: isCredit && creditLimit != null ? currencyToCents(creditLimit) : null,
   };
 }
 
@@ -77,17 +80,80 @@ export async function createCard(input: unknown, force = false): Promise<CreateC
       where: { userId: user.id, bank: parsed.bank, last4: parsed.last4 },
     });
     if (existing) {
-      return { status: "duplicate", existing };
+      return { status: "duplicate", existing: toCardView(existing) };
     }
   }
 
-  const card = await prisma.card.create({
+  await prisma.card.create({
     // El userId SIEMPRE viene de la sesión, nunca del input del cliente.
     data: { ...toCardData(parsed), userId: user.id },
   });
 
   revalidatePath("/tarjetas");
-  return { status: "created", card };
+  return { status: "created" };
+}
+
+export type CardUtilizationView = {
+  cardId: string;
+  name: string;
+  /** Moneda del límite/uso (la principal de la tarjeta, `currencies[0]`). */
+  currency: string;
+  usedCents: string; // BigInt → string (borde serializable)
+  limitCents: string;
+  percent: number;
+};
+
+/**
+ * Utilización de las tarjetas de crédito con límite cargado: cuánto del límite está
+ * comprometido en cuotas todavía no pagadas, por tarjeta, en su moneda principal.
+ * Devuelve un DTO plano (strings/números) reutilizable por la sección de tarjetas
+ * (barra inline) y por la alerta del dashboard. Todo scopeado por `userId` de sesión.
+ */
+export async function getCardsUtilization(): Promise<CardUtilizationView[]> {
+  const user = await requireUser();
+
+  const cards = await prisma.card.findMany({
+    where: {
+      userId: user.id,
+      isActive: true,
+      type: "CREDIT",
+      creditLimitCents: { not: null },
+    },
+    select: { id: true, name: true, currencies: true, creditLimitCents: true },
+  });
+  if (cards.length === 0) return [];
+
+  // Uso = suma de cuotas NO pagadas (PENDING/OVERDUE) por tarjeta y moneda. La cuota no
+  // guarda `cardId` (va por `purchase`), así que agregamos en JS. Scopeado por userId.
+  const rows = await prisma.installment.findMany({
+    where: {
+      status: { not: "PAID" },
+      purchase: { userId: user.id, cardId: { in: cards.map((c) => c.id) } },
+    },
+    select: { amountCents: true, currency: true, purchase: { select: { cardId: true } } },
+  });
+
+  const usedByCard = new Map<string, Map<string, bigint>>();
+  for (const r of rows) {
+    const cardId = r.purchase.cardId!;
+    const byCurrency = usedByCard.get(cardId) ?? new Map<string, bigint>();
+    byCurrency.set(r.currency, (byCurrency.get(r.currency) ?? 0n) + r.amountCents);
+    usedByCard.set(cardId, byCurrency);
+  }
+
+  return cards.map((c) => {
+    const currency = c.currencies[0] ?? "ARS";
+    const usedCents = usedByCard.get(c.id)?.get(currency) ?? 0n;
+    const limitCents = c.creditLimitCents!;
+    return {
+      cardId: c.id,
+      name: c.name,
+      currency,
+      usedCents: usedCents.toString(),
+      limitCents: limitCents.toString(),
+      percent: utilizationPercent(usedCents, limitCents),
+    };
+  });
 }
 
 export async function getCardById(id: string) {

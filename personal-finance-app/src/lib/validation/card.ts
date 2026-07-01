@@ -35,6 +35,11 @@ export const cardSchema = z
       .array(z.enum(["ARS", "USD"]))
       .min(1, "Elegí al menos una moneda")
       .transform((v) => Array.from(new Set(v))),
+    // Límite de crédito en unidades de la moneda principal (pesos/dólares enteros).
+    // Requerido para crédito (validado en superRefine); la Server Action lo convierte a
+    // centavos. `nullish` para permitir el campo vacío mientras se edita y para el débito
+    // (que no tiene límite): el vacío llega como `null` y superRefine lo exige si es crédito.
+    creditLimit: z.number().int("Ingresá un número entero").positive("Debe ser mayor a 0").nullish(),
   })
   .superRefine((data, ctx) => {
     if (data.type !== "CREDIT") return; // el débito no tiene ciclo ni vencimiento
@@ -56,6 +61,13 @@ export const cardSchema = z
     }
     if (data.dueDay == null) {
       ctx.addIssue({ path: ["dueDay"], code: "custom", message: "Día inválido" });
+    }
+    if (data.creditLimit == null) {
+      ctx.addIssue({
+        path: ["creditLimit"],
+        code: "custom",
+        message: "El límite de crédito es requerido",
+      });
     }
   });
 

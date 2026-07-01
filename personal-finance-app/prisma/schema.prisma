@@ -92,6 +92,10 @@ model Card {
   // y en USD bajo el MISMO ciclo (cierre/vencimiento). La compra elige entre estas;
   // cada Installment/Purchase guarda su propia `currency`. Al menos una (validado en Zod).
   currencies     String[]  @default(["ARS"])
+  // Límite de crédito (centavos, en la moneda principal de la tarjeta = currencies[0]).
+  // Solo aplica a CRÉDITO; nullable porque el débito no lo tiene y el usuario puede no
+  // cargarlo. Habilita la barra de utilización (cuánto del límite está comprometido).
+  creditLimitCents BigInt?
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
 

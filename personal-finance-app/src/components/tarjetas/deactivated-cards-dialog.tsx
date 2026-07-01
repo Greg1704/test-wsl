@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { Card } from "@/generated/prisma/client";
+import type { CardView } from "@/lib/card-view";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { ReactivateCardButton } from "@/components/tarjetas/reactivate-card-button";
 
-export function DeactivatedCardsDialog({ cards }: { cards: Card[] }) {
+export function DeactivatedCardsDialog({ cards }: { cards: CardView[] }) {
   const [open, setOpen] = useState(false);
 
   return (

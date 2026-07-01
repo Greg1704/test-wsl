@@ -32,10 +32,10 @@ type DemoPurchase = {
 };
 
 const DEMO_CARDS = [
-  // name, bank, last4, closingDay, dueDay, currency, vencimiento [año, mesIndex]
-  { name: "Visa Galicia", bank: "Galicia", last4: "4321", closingDay: 28, dueDay: 10, currency: "ARS", exp: [2028, 7] },
-  { name: "Master BBVA", bank: "BBVA", last4: "8810", closingDay: 22, dueDay: 5, currency: "ARS", exp: [2027, 10] },
-  { name: "Amex Santander", bank: "Santander", last4: "0042", closingDay: 15, dueDay: 28, currency: "USD", exp: [2028, 2] },
+  // name, bank, last4, closingDay, dueDay, currency, vencimiento [año, mesIndex], límite (unidades)
+  { name: "Visa Galicia", bank: "Galicia", last4: "4321", closingDay: 28, dueDay: 10, currency: "ARS", exp: [2028, 7], creditLimit: 3_000_000 },
+  { name: "Master BBVA", bank: "BBVA", last4: "8810", closingDay: 22, dueDay: 5, currency: "ARS", exp: [2027, 10], creditLimit: 2_500_000 },
+  { name: "Amex Santander", bank: "Santander", last4: "0042", closingDay: 15, dueDay: 28, currency: "USD", exp: [2028, 2], creditLimit: 3_000 },
 ] as const;
 
 const DEMO_PURCHASES: DemoPurchase[] = [
@@ -105,6 +105,7 @@ async function main() {
           closingDay: c.closingDay,
           dueDay: c.dueDay,
           currencies: [c.currency],
+          creditLimitCents: BigInt(c.creditLimit * 100),
           // Vencimiento de la tarjeta: fin de mes (convención del modelo).
           expirationDate: new Date(c.exp[0], c.exp[1] + 1, 0),
         },
