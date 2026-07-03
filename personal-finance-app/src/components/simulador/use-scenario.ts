@@ -10,6 +10,10 @@ import {
   type SimulationImpact,
 } from "@/server/lib/simulation";
 import { currencyToCents } from "@/server/lib/money";
+import {
+  projectUtilization,
+  type UtilizationProjection,
+} from "@/server/lib/card-utilization";
 import type { ScenarioContext, SimCard } from "./types";
 
 export type Scenario = {
@@ -22,6 +26,12 @@ export type Scenario = {
   setCurrency: (c: string) => void;
   plan: PurchasePlan | null;
   impact: SimulationImpact | null;
+  /** La tarjeta elegida tiene límite y la compra es en otra moneda ⇒ hace falta cotización. */
+  needsLimitRate: boolean;
+  /** Proyección de utilización del límite (null si la tarjeta no tiene límite o falta la tasa). */
+  utilization: UtilizationProjection | null;
+  /** Moneda del límite (la principal del usuario), para etiquetar la barra y el input. */
+  limitCurrency: string;
 };
 
 /**
@@ -81,6 +91,23 @@ export function useScenario(cards: SimCard[], ctx: ScenarioContext): Scenario {
     }
   }, [selectedCard, totalAmount, totalInstallments, financedTotal, purchaseDate, currency]);
 
+  const limitRate = useWatch({ control: form.control, name: "limitRate" });
+
+  // Proyección de utilización del límite (segundo eje del crédito). Solo si la tarjeta
+  // tiene límite cargado; si la compra es en otra moneda que el límite, necesita la tasa.
+  const limitInfo = selectedCard?.limit ?? null;
+  const needsLimitRate = !!limitInfo && currency !== defaultCurrency;
+  const utilization = useMemo(() => {
+    if (!limitInfo || !plan) return null;
+    return projectUtilization({
+      currentUsedCents: BigInt(limitInfo.usedCents),
+      limitCents: BigInt(limitInfo.limitCents),
+      addedCents: plan.totalCents, // total comprometido de la compra (suma de cuotas)
+      sameCurrency: currency === defaultCurrency,
+      rate: needsLimitRate ? limitRate : undefined,
+    });
+  }, [limitInfo, plan, currency, defaultCurrency, needsLimitRate, limitRate]);
+
   const impact = useMemo(() => {
     if (!plan || !selectedCard) return null;
     const base = baselines.find((b) => b.currency === currency);
@@ -101,5 +128,16 @@ export function useScenario(cards: SimCard[], ctx: ScenarioContext): Scenario {
     });
   }, [plan, selectedCard, baselines, currency, monthLabels, startYear, startMonth, income, defaultCurrency]);
 
-  return { form, selectedCard, currency, currencyOptions, setCurrency, plan, impact };
+  return {
+    form,
+    selectedCard,
+    currency,
+    currencyOptions,
+    setCurrency,
+    plan,
+    impact,
+    needsLimitRate,
+    utilization,
+    limitCurrency: defaultCurrency,
+  };
 }

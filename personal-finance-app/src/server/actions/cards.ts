@@ -7,7 +7,7 @@ import { requireUser } from "@/server/auth/session";
 import { cardSchema, renewCardSchema } from "@/lib/validation/card";
 import { parseExpiration, startOfToday } from "@/server/lib/dates";
 import { currencyToCents } from "@/server/lib/money";
-import { utilizationPercent } from "@/server/lib/card-utilization";
+import { utilizationPercent, convertCents } from "@/server/lib/card-utilization";
 import { toCardView, type CardView } from "@/lib/card-view";
 
 /**
@@ -96,7 +96,7 @@ export async function createCard(input: unknown, force = false): Promise<CreateC
 export type CardUtilizationView = {
   cardId: string;
   name: string;
-  /** Moneda del límite/uso (la principal de la tarjeta, `currencies[0]`). */
+  /** Moneda del límite/uso: la principal del usuario (`User.defaultCurrency`). */
   currency: string;
   usedCents: string; // BigInt → string (borde serializable)
   limitCents: string;
@@ -105,12 +105,22 @@ export type CardUtilizationView = {
 
 /**
  * Utilización de las tarjetas de crédito con límite cargado: cuánto del límite está
- * comprometido en cuotas todavía no pagadas, por tarjeta, en su moneda principal.
- * Devuelve un DTO plano (strings/números) reutilizable por la sección de tarjetas
- * (barra inline) y por la alerta del dashboard. Todo scopeado por `userId` de sesión.
+ * comprometido en cuotas todavía no pagadas, por tarjeta. El límite y el uso van en la
+ * moneda principal del USUARIO (`defaultCurrency`): las cuotas en otra moneda se convierten
+ * con la cotización snapshot de su compra (`Purchase.limitRate`). Devuelve un DTO plano
+ * reutilizable por la sección de tarjetas y la alerta del dashboard. Scopeado por `userId`.
+ *
+ * Devuelve `[]` si el seguimiento de límites está apagado (`trackCreditLimits`), lo que
+ * apaga la barra y la alerta en toda la UI sin ramas extra en los componentes.
  */
 export async function getCardsUtilization(): Promise<CardUtilizationView[]> {
   const user = await requireUser();
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { defaultCurrency: true, trackCreditLimits: true },
+  });
+  if (!profile?.trackCreditLimits) return [];
+  const mainCurrency = profile.defaultCurrency;
 
   const cards = await prisma.card.findMany({
     where: {
@@ -119,36 +129,48 @@ export async function getCardsUtilization(): Promise<CardUtilizationView[]> {
       type: "CREDIT",
       creditLimitCents: { not: null },
     },
-    select: { id: true, name: true, currencies: true, creditLimitCents: true },
+    select: { id: true, name: true, creditLimitCents: true },
   });
   if (cards.length === 0) return [];
 
-  // Uso = suma de cuotas NO pagadas (PENDING/OVERDUE) por tarjeta y moneda. La cuota no
-  // guarda `cardId` (va por `purchase`), así que agregamos en JS. Scopeado por userId.
+  // Uso = suma de cuotas NO pagadas (PENDING/OVERDUE), convertidas a la moneda principal.
+  // La cuota lleva la moneda de su compra; si difiere de la principal, se convierte con la
+  // `limitRate` snapshot de la compra. Una compra en otra moneda SIN tasa (previa a la
+  // feature) no se puede imputar → se excluye del uso. La cuota no guarda `cardId` (va por
+  // `purchase`), así que agregamos en JS. Scopeado por userId.
   const rows = await prisma.installment.findMany({
     where: {
       status: { not: "PAID" },
       purchase: { userId: user.id, cardId: { in: cards.map((c) => c.id) } },
     },
-    select: { amountCents: true, currency: true, purchase: { select: { cardId: true } } },
+    select: {
+      amountCents: true,
+      currency: true,
+      purchase: { select: { cardId: true, limitRate: true } },
+    },
   });
 
-  const usedByCard = new Map<string, Map<string, bigint>>();
+  const usedByCard = new Map<string, bigint>();
   for (const r of rows) {
     const cardId = r.purchase.cardId!;
-    const byCurrency = usedByCard.get(cardId) ?? new Map<string, bigint>();
-    byCurrency.set(r.currency, (byCurrency.get(r.currency) ?? 0n) + r.amountCents);
-    usedByCard.set(cardId, byCurrency);
+    let cents: bigint;
+    if (r.currency === mainCurrency) {
+      cents = r.amountCents;
+    } else if (r.purchase.limitRate != null) {
+      cents = convertCents(r.amountCents, r.purchase.limitRate.toString());
+    } else {
+      continue; // moneda extranjera sin cotización: no imputable al límite
+    }
+    usedByCard.set(cardId, (usedByCard.get(cardId) ?? 0n) + cents);
   }
 
   return cards.map((c) => {
-    const currency = c.currencies[0] ?? "ARS";
-    const usedCents = usedByCard.get(c.id)?.get(currency) ?? 0n;
+    const usedCents = usedByCard.get(c.id) ?? 0n;
     const limitCents = c.creditLimitCents!;
     return {
       cardId: c.id,
       name: c.name,
-      currency,
+      currency: mainCurrency,
       usedCents: usedCents.toString(),
       limitCents: limitCents.toString(),
       percent: utilizationPercent(usedCents, limitCents),

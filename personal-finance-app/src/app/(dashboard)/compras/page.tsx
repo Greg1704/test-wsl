@@ -63,12 +63,16 @@ export default async function ComprasPage({
     listPurchases(filters),
     listActiveCards(),
     listCategories(),
-    prisma.user.findUnique({ where: { id: user.id }, select: { defaultCurrency: true } }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { defaultCurrency: true, trackCreditLimits: true },
+    }),
   ]);
   const { purchases, page, pageCount, total } = purchasesResult;
   // Moneda principal del usuario (Configuración): default de la compra cuando la
   // tarjeta elegida la opera. Ver PurchaseFormDialog.
   const defaultCurrency: "ARS" | "USD" = profile?.defaultCurrency === "USD" ? "USD" : "ARS";
+  const trackCreditLimits = profile?.trackCreditLimits ?? false;
 
   // URL de una página preservando los filtros activos (la paginación no los pierde).
   const pageHref = (n: number) => {
@@ -95,6 +99,9 @@ export default async function ComprasPage({
     currencies: c.currencies,
     closingDay: c.closingDay,
     dueDay: c.dueDay,
+    // Derivado en el server: no cruzamos el BigInt del límite al cliente (regla
+    // rsc-y-payload). Dispara el modal de conversión en compras multi-moneda.
+    hasCreditLimit: c.creditLimitCents != null,
   }));
   const dialogCategories = categories.map((c) => ({ id: c.id, name: c.name }));
   // El manager de categorías usa además color/icon y el conteo de compras
@@ -114,6 +121,7 @@ export default async function ComprasPage({
       cards={dialogCards}
       categories={dialogCategories}
       defaultCurrency={defaultCurrency}
+      trackCreditLimits={trackCreditLimits}
       trigger={<Button>+ Nueva compra</Button>}
     />
   );

@@ -35,27 +35,37 @@ cuotas futuras (barra de utilización).
   ("si comprás esto, quedás al 85% del límite").
 - **Esfuerzo:** bajo-medio.
 
-> **Estado: parcialmente implementado.** Columna `Card.creditLimitCents` (BigInt,
-> centavos, moneda principal = `currencies[0]`), cálculo puro y testeado en
-> `src/server/lib/card-utilization.ts`, barra inline por tarjeta (`CardItem`) y alerta
-> en el dashboard (`CardLimitsAlert`, tarjetas ≥ 75% del límite). El "uso" es la suma de
-> cuotas NO pagadas por tarjeta/moneda (`getCardsUtilization`). El límite es **requerido**
-> al alta/edición de una tarjeta de crédito (Zod `superRefine`).
+> **Estado: implementado.** Seguimiento **opt-in** por usuario (`User.trackCreditLimits`,
+> toggle en Configuración; apagado por defecto para no forzar el problema). Con el
+> seguimiento activo:
+> - El límite (`Card.creditLimitCents`) es **opcional por tarjeta** y se carga SIEMPRE en la
+>   **moneda principal del usuario** (`User.defaultCurrency`), no en la de la tarjeta. Esto
+>   resuelve la fragilidad de `currencies[0]`: hay un único tope y una única moneda de límite.
+> - Las compras a crédito en **otra moneda** que la principal piden la **cotización al
+>   confirmar** (modal de conversión en `PurchaseFormDialog`), que se guarda como snapshot
+>   inmutable en `Purchase.limitRate` (unidades de la principal por 1 de la moneda de la
+>   compra) — igual que hace un banco: fija el monto convertido al momento del gasto.
+> - `getCardsUtilization` computa el uso en la moneda principal sumando las cuotas no pagadas
+>   y convirtiendo las de otra moneda con su `limitRate`. Cálculo puro/testeado
+>   (`utilizationPercent`, `utilizationLevel`, `convertCents`), barra inline por tarjeta y
+>   alerta ≥ 75% en el dashboard.
+>
+> **Decisión de "moneda principal" (resuelta):** en vez de anclar el límite a la moneda de
+> la tarjeta (frágil) o modelar un límite por moneda (caro), el límite es un **tope único en
+> la moneda del usuario** y todo lo demás se convierte hacia él con cotización snapshot. Caso
+> aceptado: una tarjeta USD-only con usuario ARS tendría límite en ARS y toda compra pediría
+> conversión (poco frecuente en AR).
+>
+> **Integración con el simulador (hecha):** al simular una compra sobre una tarjeta con
+> límite, el simulador proyecta la utilización **antes → después** ("quedás al 92% del
+> límite"), con la misma barra/colores que Tarjetas, en modo plan único y en la comparación
+> A vs B. Lógica pura `projectUtilization` (reusa `convertCents`/`utilizationPercent`). Si la
+> compra simulada es en otra moneda que el límite, el simulador **pide la cotización** (un
+> input, opción A) para convertirla — mismo criterio que el alta real.
 >
 > **Pendiente:**
-> - Integración con el **simulador** (proyectar la utilización pre-compra: "si comprás
->   esto, quedás al 92% del límite").
-> - **Decisión de producto — "moneda principal" en tarjetas multi-moneda.** Hoy el límite
->   y la barra usan `currencies[0]`, que es solo el **primer elemento del array** (orden de
->   inserción, típicamente el `defaultCurrency` del usuario). No es una elección deliberada
->   y es **frágil**: reordenar las monedas al editar cambia cuál es la "principal". Además,
->   en una tarjeta ARS+USD real solo se muestra el límite de esa primera moneda; lo
->   comprometido en la otra no tiene barra. Hay que decidir entre: (a) hacerlo **explícito**
->   con un campo `Card.primaryCurrency` / selector "moneda del límite" en el form (barato,
->   quita la fragilidad), o (b) modelar un **límite por moneda** (columna extra o modelo
->   `CardCreditLimit`) y renderizar una barra por cada moneda de la tarjeta (lo correcto a
->   futuro, más esfuerzo). Para el MVP `currencies[0]` alcanza porque la mayoría de las
->   tarjetas son ARS-only.
+> - Compras USD **previas** a la feature (sin `limitRate`) se **excluyen** del uso (no se
+>   puede inventar la tasa). A futuro: ofrecer cargar la cotización retroactiva.
 
 ---
 

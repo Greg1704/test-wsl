@@ -24,13 +24,18 @@ export default async function TarjetasPage() {
     listActiveCards(),
     listExpiredCards(),
     listDeactivatedCards(),
-    prisma.user.findUnique({ where: { id: user.id }, select: { defaultCurrency: true } }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { defaultCurrency: true, trackCreditLimits: true },
+    }),
     getCardsUtilization(),
   ]);
 
   const hasAny = active.length + expired.length + deactivated.length > 0;
   // Moneda principal del usuario (Configuración): preselección en el alta de tarjeta.
   const defaultCurrency: "ARS" | "USD" = profile?.defaultCurrency === "USD" ? "USD" : "ARS";
+  // Con el seguimiento activo, el alta/edición de tarjeta muestra el campo de límite.
+  const trackCreditLimits = profile?.trackCreditLimits ?? false;
 
   // Utilización por tarjeta, ya formateada para la barra (borde serializable).
   const utilByCard = new Map(
@@ -60,6 +65,7 @@ export default async function TarjetasPage() {
           )}
           <CardFormDialog
             defaultCurrency={defaultCurrency}
+            trackCreditLimits={trackCreditLimits}
             trigger={<Button>+ Nueva tarjeta</Button>}
           />
         </div>
@@ -76,6 +82,7 @@ export default async function TarjetasPage() {
           </div>
           <CardFormDialog
             defaultCurrency={defaultCurrency}
+            trackCreditLimits={trackCreditLimits}
             trigger={<Button>+ Nueva tarjeta</Button>}
           />
         </div>
@@ -88,6 +95,7 @@ export default async function TarjetasPage() {
                   key={card.id}
                   card={toCardView(card)}
                   utilization={utilByCard.get(card.id)}
+                  trackCreditLimits={trackCreditLimits}
                 />
               ))}
             </div>

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useScenario } from "./use-scenario";
 import { ScenarioForm } from "./scenario-form";
 import { ScenarioImpact } from "./scenario-impact";
+import { ScenarioUtilization } from "./scenario-utilization";
 import { ComparisonView } from "./comparison-view";
 import type { ScenarioContext, SimCard } from "./types";
 
@@ -55,6 +56,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             currency={a.currency}
             currencyOptions={a.currencyOptions}
             onCurrencyChange={a.setCurrency}
+            showLimitRate={a.needsLimitRate}
+            limitCurrency={a.limitCurrency}
             title="Plan A"
             description="Tarjeta, monto y cuotas de este plan."
           />
@@ -65,6 +68,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             currency={b.currency}
             currencyOptions={b.currencyOptions}
             onCurrencyChange={b.setCurrency}
+            showLimitRate={b.needsLimitRate}
+            limitCurrency={b.limitCurrency}
             title="Plan B"
             description="El plan a comparar contra A."
             onRemove={() => setComparing(false)}
@@ -79,6 +84,8 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
             currency={a.currency}
             currencyOptions={a.currencyOptions}
             onCurrencyChange={a.setCurrency}
+            showLimitRate={a.needsLimitRate}
+            limitCurrency={a.limitCurrency}
           />
           <Button
             type="button"
@@ -108,7 +115,16 @@ export function SimulatorClient({ cards, ...ctx }: SimulatorClientProps) {
           </Card>
         )
       ) : a.impact ? (
-        <ScenarioImpact impact={a.impact} currency={a.currency} />
+        <>
+          <ScenarioImpact impact={a.impact} currency={a.currency} />
+          {a.selectedCard?.limit && (
+            <ScenarioUtilization
+              projection={a.utilization}
+              needsRate={a.needsLimitRate}
+              currency={a.limitCurrency}
+            />
+          )}
+        </>
       ) : (
         <Card>
           <CardContent className="text-muted-foreground py-12 text-center text-sm">

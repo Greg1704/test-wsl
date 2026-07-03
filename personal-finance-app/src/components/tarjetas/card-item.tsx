@@ -36,9 +36,12 @@ const BAR_CLASS: Record<ReturnType<typeof utilizationLevel>, string> = {
 export function CardItem({
   card,
   utilization,
+  trackCreditLimits = false,
 }: {
   card: CardView;
   utilization?: CardUtilization;
+  /** Propaga el flag al dialog de edición para mostrar el campo de límite. */
+  trackCreditLimits?: boolean;
 }) {
   // Banco conocido → color de fondo de marca; "Otro"/sin banco → neutro.
   const bank = findBank(card.bank);
@@ -112,6 +115,7 @@ export function CardItem({
       <CardFooter className="gap-2">
         <CardFormDialog
           card={card}
+          trackCreditLimits={trackCreditLimits}
           trigger={
             <Button variant="outline" size="sm">
               Editar

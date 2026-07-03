@@ -6,6 +6,7 @@ import { startOfMonth } from "@/server/lib/dates";
 import { IncomeForm } from "@/components/configuracion/income-form";
 import { SavingsForm } from "@/components/configuracion/savings-form";
 import { NotificationsForm } from "@/components/configuracion/notifications-form";
+import { CreditLimitForm } from "@/components/configuracion/credit-limit-form";
 import { Separator } from "@/components/ui/separator";
 
 /** Ingreso vigente del mes actual para una moneda, en unidades (number) o undefined. */
@@ -27,7 +28,11 @@ export default async function ConfiguracionPage() {
   const [profile, incomeRows, savingsRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
-      select: { defaultCurrency: true, monthlyReportEnabled: true },
+      select: {
+        defaultCurrency: true,
+        monthlyReportEnabled: true,
+        trackCreditLimits: true,
+      },
     }),
     prisma.incomeEntry.findMany({
       where: { userId: user.id },
@@ -87,6 +92,21 @@ export default async function ConfiguracionPage() {
           </p>
         </div>
         <NotificationsForm initialEnabled={profile?.monthlyReportEnabled ?? false} />
+      </section>
+
+      <Separator />
+
+      <section className="grid gap-4">
+        <div>
+          <h2 className="text-lg font-medium tracking-tight">Límite de crédito</h2>
+          <p className="text-muted-foreground text-sm">
+            Seguimiento opcional de cuánto de cada tarjeta está comprometido en cuotas.
+          </p>
+        </div>
+        <CreditLimitForm
+          initialEnabled={profile?.trackCreditLimits ?? false}
+          mainCurrency={initial.defaultCurrency}
+        />
       </section>
     </div>
   );

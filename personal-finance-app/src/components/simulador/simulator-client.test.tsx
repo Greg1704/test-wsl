@@ -41,6 +41,18 @@ const multiCurrencyProps: SimulatorClientProps = {
   ],
 };
 
+// Tarjeta ARS con límite cargado: usado $8.000 de $200.000 (4%).
+const limitedProps: SimulatorClientProps = {
+  ...baseProps,
+  cards: [{ ...baseProps.cards[0], limit: { usedCents: "800000", limitCents: "20000000" } }],
+};
+
+// Tarjeta multi-moneda con límite en ARS: una compra USD pide la cotización.
+const multiCurrencyLimitedProps: SimulatorClientProps = {
+  ...multiCurrencyProps,
+  cards: [{ ...multiCurrencyProps.cards[0], limit: { usedCents: "0", limitCents: "200000000" } }],
+};
+
 describe("SimulatorClient", () => {
   it("muestra el form y, sin inputs, invita a completarlo", () => {
     render(<SimulatorClient {...baseProps} />);
@@ -94,6 +106,37 @@ describe("SimulatorClient", () => {
     fireEvent.click(screen.getAllByRole("combobox")[0]);
     fireEvent.click(await screen.findByRole("option", { name: /Visa Galicia/ }));
     expect(screen.queryByText("Moneda")).not.toBeInTheDocument();
+  });
+
+  it("una tarjeta con límite proyecta la utilización tras la compra", async () => {
+    render(<SimulatorClient {...limitedProps} />);
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByRole("option", { name: /Visa Galicia/ }));
+    fireEvent.change(screen.getByLabelText("Monto total"), { target: { value: "30000" } });
+
+    // Aparece la sección de utilización con el % resultante (4% usado + $30.000 = 19%).
+    expect(await screen.findByText(/Utilización del límite/)).toBeInTheDocument();
+    expect(screen.getByText("19%")).toBeInTheDocument();
+  });
+
+  it("una compra en otra moneda que el límite pide la cotización para proyectar", async () => {
+    render(<SimulatorClient {...multiCurrencyLimitedProps} />);
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(await screen.findByRole("option", { name: /Amex Multi/ }));
+    // Cambiar la moneda del plan a USD (≠ principal ARS del límite).
+    fireEvent.click(screen.getAllByRole("combobox")[1]);
+    fireEvent.click(await screen.findByRole("option", { name: "USD (dólares)" }));
+    fireEvent.change(screen.getByLabelText("Monto total"), { target: { value: "100" } });
+
+    // Sin cotización: aparece el input y la sección invita a cargarla.
+    expect(await screen.findByText(/Cotización para el límite/)).toBeInTheDocument();
+    expect(screen.getByText(/Ingresá la cotización/)).toBeInTheDocument();
+
+    // Al cargar la tasa (US$100 × 1500 = $150.000 de $2.000.000 = 7,5%), aparece la barra.
+    fireEvent.change(screen.getByLabelText(/Cotización para el límite/), {
+      target: { value: "1500" },
+    });
+    expect(await screen.findByText("7,5%")).toBeInTheDocument();
   });
 
   it("activar 'Comparar' revela Plan A y Plan B", () => {

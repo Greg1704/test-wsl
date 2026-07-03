@@ -57,11 +57,21 @@ type Props = {
    * entre las que opera la tarjeta. Solo aplica al crear (en edición manda `card`).
    */
   defaultCurrency?: "ARS" | "USD";
+  /**
+   * Seguimiento de límite de crédito activo (`User.trackCreditLimits`). Solo con esto en
+   * `true` se muestra el campo de límite; si no, la tarjeta se crea sin límite.
+   */
+  trackCreditLimits?: boolean;
   /** El elemento que dispara la apertura (botón "Nueva tarjeta" o "Editar"). */
   trigger: React.ReactNode;
 };
 
-export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props) {
+export function CardFormDialog({
+  card,
+  defaultCurrency = "ARS",
+  trackCreditLimits = false,
+  trigger,
+}: Props) {
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(card);
 
@@ -172,7 +182,7 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
     const expired = existing.isActive && isCardExpired(existing.expirationDate);
 
     return (
-      <div className="grid gap-4">
+      <div className="scrollbar-subtle grid min-h-0 gap-4 overflow-y-auto -mx-6 px-6">
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
           {deactivated ? (
             <>
@@ -222,7 +232,7 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-40px)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar tarjeta" : "Nueva tarjeta"}</DialogTitle>
           <DialogDescription>
@@ -236,7 +246,13 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
           renderDuplicatePanel(duplicate)
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              // min-h-0 + overflow-y-auto: el cuerpo scrollea dentro del alto máximo del
+              // modal. -mx-6 px-6 negan el padding del DialogContent para que la barra de
+              // scroll quede al borde y los focus rings de los inputs no se recorten.
+              className="scrollbar-subtle grid min-h-0 gap-4 overflow-y-auto -mx-6 px-6"
+            >
               <FormField
                 control={form.control}
                 name="type"
@@ -477,13 +493,13 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
               </div>
               )}
 
-              {isCredit && (
+              {isCredit && trackCreditLimits && (
                 <FormField
                   control={form.control}
                   name="creditLimit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Límite de crédito</FormLabel>
+                      <FormLabel>Límite de crédito ({defaultCurrency})</FormLabel>
                       <FormControl>
                         <Input
                           inputMode="numeric"
@@ -498,8 +514,8 @@ export function CardFormDialog({ card, defaultCurrency = "ARS", trigger }: Props
                         />
                       </FormControl>
                       <FormDescription>
-                        En la moneda principal de la tarjeta. Habilita la barra de
-                        utilización (cuánto del límite está comprometido en cuotas).
+                        Opcional, en {defaultCurrency} (tu moneda principal). Habilita la
+                        barra de utilización: cuánto del límite está comprometido en cuotas.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

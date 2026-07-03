@@ -47,6 +47,10 @@ type ScenarioFormProps = {
   /** Monedas que opera la tarjeta elegida; si hay más de una, se muestra el select. */
   currencyOptions: string[];
   onCurrencyChange: (c: string) => void;
+  /** La compra es en otra moneda que el límite ⇒ pedir la cotización para proyectarlo. */
+  showLimitRate?: boolean;
+  /** Moneda del límite (la principal del usuario), para etiquetar el input de cotización. */
+  limitCurrency?: string;
   title?: string;
   description?: string;
   /** Si se pasa, muestra una X para quitar este escenario (escenario B). */
@@ -60,6 +64,8 @@ export function ScenarioForm({
   currency,
   currencyOptions,
   onCurrencyChange,
+  showLimitRate = false,
+  limitCurrency = "ARS",
   title = "Compra hipotética",
   description = "Elegí la tarjeta, el monto y las cuotas; calculamos el impacto al instante.",
   onRemove,
@@ -252,6 +258,38 @@ export function ScenarioForm({
                 )}
               />
             </div>
+
+            {/* Cotización para proyectar el límite cuando la compra es en otra moneda que la
+                principal. No afecta el flujo de cuotas, solo la barra de utilización. */}
+            {showLimitRate && (
+              <FormField
+                control={form.control}
+                name="limitRate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Cotización para el límite (1 {currency} = ? {limitCurrency})
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.000001"
+                        min="0"
+                        placeholder="0,00"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value === "" ? undefined : e.target.valueAsNumber
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Resumen del plan: misma cuenta que el preview del form de compra. */}
             {plan && (

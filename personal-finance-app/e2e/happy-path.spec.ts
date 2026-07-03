@@ -86,7 +86,7 @@ test.describe("compra en cuotas (RNF-6.3, parte 2)", () => {
     await selectOption(page, "Banco", "Galicia");
     await cardDialog.getByLabel("Últimos 4 dígitos").fill("4321");
     await cardDialog.getByLabel("Vencimiento (MM/AA)").fill("12/30");
-    await cardDialog.getByLabel("Límite de crédito").fill("2000000");
+    // El límite de crédito es opt-in (Configuración) y no forma parte del flujo core.
     await cardDialog.getByRole("button", { name: "Crear tarjeta" }).click();
     await expect(cardDialog).toBeHidden();
     await expect(page.getByText(cardName)).toBeVisible();

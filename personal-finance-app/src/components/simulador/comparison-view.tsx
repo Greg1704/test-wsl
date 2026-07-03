@@ -10,6 +10,7 @@ import {
 } from "@/server/lib/scenario-compare";
 import { formatMoney } from "@/server/lib/money";
 import { formatDate } from "@/server/lib/dates";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -70,6 +71,25 @@ export function ComparisonView({
   const impactA = a.impact!;
   const impactB = b.impact!;
   const sameCurrency = a.currency === b.currency;
+
+  // Celda de "utilización resultante" de un plan: % tras la compra (coloreado por nivel),
+  // "Falta cotización" si es multi-moneda sin tasa, o "—" si la tarjeta no tiene límite.
+  const utilizationCell = (s: typeof a): ReactNode => {
+    if (!s.selectedCard?.limit) return "—";
+    if (!s.utilization) return s.needsLimitRate ? "Falta cotización" : "—";
+    const u = s.utilization;
+    return (
+      <span
+        className={cn(
+          u.afterLevel === "over" && "text-destructive",
+          u.afterLevel === "warning" && "text-amber-600 dark:text-amber-400"
+        )}
+      >
+        {u.afterPercent.toLocaleString("es-AR")}%
+      </span>
+    );
+  };
+  const anyLimit = Boolean(a.selectedCard?.limit || b.selectedCard?.limit);
 
   const metricsA = useMemo(
     () =>
@@ -134,6 +154,17 @@ export function ComparisonView({
                   </TableCell>
                 </TableRow>
               ))}
+              {anyLimit && (
+                <TableRow>
+                  <TableCell className="text-muted-foreground">Al límite (después)</TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {utilizationCell(a)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {utilizationCell(b)}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
 

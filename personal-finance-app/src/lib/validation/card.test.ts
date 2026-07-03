@@ -69,13 +69,10 @@ describe("cardSchema — monedas", () => {
 describe("cardSchema — límite de crédito", () => {
   const credit = { ...base, expiration: "08/30" };
 
-  it("exige el límite en una tarjeta de crédito", () => {
-    const withoutLimit = { ...credit, creditLimit: undefined };
-    const result = cardSchema.safeParse(withoutLimit);
-    expect(result.success).toBe(false);
-    expect(result.error?.issues.some((i) => /límite de crédito es requerido/i.test(i.message))).toBe(
-      true
-    );
+  it("acepta una tarjeta de crédito sin límite (es opcional)", () => {
+    // El límite es opt-in: solo aparece con el seguimiento activo y puede quedar vacío.
+    expect(cardSchema.safeParse({ ...credit, creditLimit: undefined }).success).toBe(true);
+    expect(cardSchema.safeParse({ ...credit, creditLimit: null }).success).toBe(true);
   });
 
   it("rechaza un límite de 0 o negativo", () => {

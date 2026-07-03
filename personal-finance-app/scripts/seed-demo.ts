@@ -29,13 +29,16 @@ type DemoPurchase = {
   /** [año, mesIndex, día] para no depender de parsing de strings. */
   purchaseDate: [number, number, number];
   currency?: "ARS" | "USD";
+  /** Cotización (ARS por 1 USD) para imputar una compra USD al límite en ARS. */
+  limitRate?: number;
 };
 
 const DEMO_CARDS = [
-  // name, bank, last4, closingDay, dueDay, currency, vencimiento [año, mesIndex], límite (unidades)
+  // name, bank, last4, closingDay, dueDay, currency, vencimiento [año, mesIndex], límite (unidades,
+  // SIEMPRE en la moneda principal del usuario = ARS; las compras USD se convierten con su limitRate).
   { name: "Visa Galicia", bank: "Galicia", last4: "4321", closingDay: 28, dueDay: 10, currency: "ARS", exp: [2028, 7], creditLimit: 3_000_000 },
   { name: "Master BBVA", bank: "BBVA", last4: "8810", closingDay: 22, dueDay: 5, currency: "ARS", exp: [2027, 10], creditLimit: 2_500_000 },
-  { name: "Amex Santander", bank: "Santander", last4: "0042", closingDay: 15, dueDay: 28, currency: "USD", exp: [2028, 2], creditLimit: 3_000 },
+  { name: "Amex Santander", bank: "Santander", last4: "0042", closingDay: 15, dueDay: 28, currency: "USD", exp: [2028, 2], creditLimit: 3_500_000 },
 ] as const;
 
 const DEMO_PURCHASES: DemoPurchase[] = [
@@ -47,8 +50,8 @@ const DEMO_PURCHASES: DemoPurchase[] = [
   { description: "Zapatillas Nike", merchant: "Dexter", category: "Indumentaria", card: "Visa Galicia", amount: 189_900, installments: 3, purchaseDate: [2026, 4, 2] },
   { description: "Supermercado mensual", merchant: "Coto", category: "Supermercado", card: "Master BBVA", amount: 145_500, installments: 3, purchaseDate: [2026, 4, 20] },
   { description: "Lentes de contacto", merchant: "Óptica Lof", category: "Salud", card: "Visa Galicia", amount: 96_000, installments: 2, purchaseDate: [2026, 5, 1] },
-  { description: "iPhone 15", merchant: "Apple", category: "Tecnología", card: "Amex Santander", amount: 999.99, installments: 9, purchaseDate: [2026, 2, 12], currency: "USD" },
-  { description: "Hotel en Miami", merchant: "Booking", category: "Ocio", card: "Amex Santander", amount: 480, installments: 3, purchaseDate: [2026, 4, 10], currency: "USD" },
+  { description: "iPhone 15", merchant: "Apple", category: "Tecnología", card: "Amex Santander", amount: 999.99, installments: 9, purchaseDate: [2026, 2, 12], currency: "USD", limitRate: 1500 },
+  { description: "Hotel en Miami", merchant: "Booking", category: "Ocio", card: "Amex Santander", amount: 480, installments: 3, purchaseDate: [2026, 4, 10], currency: "USD", limitRate: 1500 },
 ];
 
 /** Cuotas de demo que se dejan VENCIDAS a propósito (badge de alerta del dashboard). */
@@ -69,7 +72,8 @@ async function main() {
     await prisma.savingsBalance.deleteMany({ where: { userId: user.id } });
     await prisma.user.update({
       where: { id: user.id },
-      data: { defaultCurrency: "ARS" },
+      // Seguimiento de límite activo para mostrar la barra de utilización en la demo.
+      data: { defaultCurrency: "ARS", trackCreditLimits: true },
     });
     // Ingreso fechado (IncomeEntry): vigente desde un mes base anterior a las compras.
     const incomeFrom = new Date(2025, 0, 1);
@@ -146,6 +150,8 @@ async function main() {
             totalInstallments: p.installments,
             purchaseDate,
             firstInstallmentDueDate: rows[0].dueDate,
+            // Snapshot de conversión para imputar la compra USD al límite en ARS.
+            limitRate: p.limitRate ?? null,
           },
         });
         await tx.installment.createMany({

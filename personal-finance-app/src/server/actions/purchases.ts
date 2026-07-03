@@ -82,6 +82,23 @@ export async function createPurchase(input: unknown) {
     throw new Error("La tarjeta de crédito no tiene ciclo de facturación configurado");
   }
 
+  // Imputación al límite de crédito. Solo con el seguimiento activo y la tarjeta con
+  // límite: si la compra es en otra moneda que la principal del usuario, hace falta la
+  // cotización (Purchase.limitRate) para convertirla al límite. Es endpoint público:
+  // validamos acá aunque el cliente ya lo haya pedido en el modal de conversión.
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { defaultCurrency: true, trackCreditLimits: true },
+  });
+  const needsConversion =
+    !!profile?.trackCreditLimits &&
+    card!.creditLimitCents != null &&
+    currency !== profile.defaultCurrency;
+  if (needsConversion && data.limitRate == null) {
+    throw new Error("Falta la cotización para imputar la compra al límite de crédito");
+  }
+  const limitRate = needsConversion ? data.limitRate : null;
+
   // Monto original (lo que costó) vs. total financiado (con recargo). Si no se
   // informa recargo, son iguales = compra sin interés.
   const financedCents =
@@ -119,6 +136,7 @@ export async function createPurchase(input: unknown) {
         purchaseDate: data.purchaseDate,
         firstInstallmentDueDate: rows[0].dueDate,
         interestRateMonthly: monthlyRate > 0 ? monthlyRate : null,
+        limitRate,
         notes: data.notes,
       },
     });

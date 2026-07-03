@@ -3,7 +3,7 @@ import { CreditCard } from "lucide-react";
 
 import { requireUser } from "@/server/auth/session";
 import { getMonthlyOverview, getProjection } from "@/server/actions/dashboard";
-import { listActiveCards } from "@/server/actions/cards";
+import { listActiveCards, getCardsUtilization } from "@/server/actions/cards";
 import { MAX_HORIZON } from "@/server/lib/simulation";
 import { centsToCurrency } from "@/server/lib/money";
 import { formatDate } from "@/server/lib/dates";
@@ -59,21 +59,31 @@ export default async function SimuladorPage() {
     );
   }
 
-  const [overview, projection] = await Promise.all([
+  const [overview, projection, utilization] = await Promise.all([
     getMonthlyOverview(now),
     getProjection(now, MAX_HORIZON),
+    // Uso actual del límite por tarjeta (en la moneda principal). [] si el seguimiento
+    // está apagado ⇒ el simulador no muestra la sección de utilización.
+    getCardsUtilization(),
   ]);
 
-  const cards: SimCard[] = cardRows.map((c) => ({
-    id: c.id,
-    name: c.name,
-    bank: c.bank,
-    last4: c.last4,
-    currencies: c.currencies,
-    // Filtradas a crédito arriba ⇒ ciclo no nulo.
-    closingDay: c.closingDay!,
-    dueDay: c.dueDay!,
-  }));
+  // Utilización actual indexada por tarjeta (usedCents/limitCents ya vienen como string).
+  const utilByCard = new Map(utilization.map((u) => [u.cardId, u]));
+
+  const cards: SimCard[] = cardRows.map((c) => {
+    const util = utilByCard.get(c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      bank: c.bank,
+      last4: c.last4,
+      currencies: c.currencies,
+      // Filtradas a crédito arriba ⇒ ciclo no nulo.
+      closingDay: c.closingDay!,
+      dueDay: c.dueDay!,
+      limit: util ? { usedCents: util.usedCents, limitCents: util.limitCents } : undefined,
+    };
+  });
 
   // Labels de los meses del horizonte (mismos índices que buildProjection).
   const startYear = now.getFullYear();

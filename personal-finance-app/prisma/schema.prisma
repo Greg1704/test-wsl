@@ -17,6 +17,11 @@ model User {
   // Opt-in al mail mensual de deudas (RF de mails). Default false: solo lo recibe
   // quien lo activa en Configuración. Lo dispara el cron /api/cron/monthly-report.
   monthlyReportEnabled Boolean @default(false)
+  // Opt-in al seguimiento de límite de crédito + utilización. Default false: no fuerza
+  // al usuario a cargar límites ni cotizaciones. Cuando está activo, el límite se carga
+  // por tarjeta (opcional) en ESTA moneda principal (defaultCurrency) y las compras en
+  // otra moneda piden la cotización al confirmar (Purchase.limitRate). Ver ARCHITECTURE.
+  trackCreditLimits Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -92,9 +97,11 @@ model Card {
   // y en USD bajo el MISMO ciclo (cierre/vencimiento). La compra elige entre estas;
   // cada Installment/Purchase guarda su propia `currency`. Al menos una (validado en Zod).
   currencies     String[]  @default(["ARS"])
-  // Límite de crédito (centavos, en la moneda principal de la tarjeta = currencies[0]).
-  // Solo aplica a CRÉDITO; nullable porque el débito no lo tiene y el usuario puede no
-  // cargarlo. Habilita la barra de utilización (cuánto del límite está comprometido).
+  // Límite de crédito en centavos, expresado SIEMPRE en la moneda principal del USUARIO
+  // (User.defaultCurrency), no en la de la tarjeta: el límite es un tope único y las
+  // compras en otra moneda se convierten a él (Purchase.limitRate). Solo aplica a CRÉDITO;
+  // nullable porque el débito no lo tiene y, con el seguimiento activo, el usuario puede
+  // dejarlo vacío por tarjeta. Habilita la barra de utilización de esa tarjeta.
   creditLimitCents BigInt?
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
@@ -126,6 +133,11 @@ model Purchase {
   purchaseDate            DateTime      @db.Date
   firstInstallmentDueDate DateTime      @db.Date
   interestRateMonthly     Decimal?      @db.Decimal(8, 4)
+  // Cotización usada para imputar esta compra al límite de crédito cuando su moneda
+  // difiere de la principal del usuario: unidades de la moneda principal por 1 unidad de
+  // `currency`, capturada al confirmar la compra (snapshot, no se recalcula). null si la
+  // compra ya está en la moneda principal o si el seguimiento de límite estaba apagado.
+  limitRate               Decimal?      @db.Decimal(18, 6)
   notes                   String?
   createdAt               DateTime      @default(now())
 

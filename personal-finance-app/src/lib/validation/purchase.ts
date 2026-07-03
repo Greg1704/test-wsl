@@ -30,6 +30,16 @@ export const purchaseSchema = z
       .number()
       .positive("El total con recargo debe ser mayor a 0")
       .optional(),
+    /**
+     * Cotización para imputar la compra al límite de crédito cuando su moneda difiere de
+     * la principal del usuario (unidades de la principal por 1 de `currency`). Solo la pide
+     * el form con el seguimiento de límites activo; el server la exige en ese caso. Se
+     * guarda como snapshot en `Purchase.limitRate`.
+     */
+    limitRate: z
+      .number()
+      .positive("La cotización debe ser mayor a 0")
+      .optional(),
     notes: z.string().max(500).optional(),
   })
   .superRefine((d, ctx) => {

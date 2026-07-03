@@ -9,6 +9,13 @@ export type SimCard = {
   currencies: string[];
   closingDay: number;
   dueDay: number;
+  /**
+   * Utilización actual del límite (cuotas ya comprometidas / límite), en centavos como
+   * string para no cruzar BigInt al cliente (regla rsc-y-payload). Presente SOLO si el
+   * seguimiento de límites está activo y esta tarjeta tiene límite cargado; si no, la
+   * sección de utilización del simulador no se muestra.
+   */
+  limit?: { usedCents: string; limitCents: string };
 };
 
 export type SimBaseline = {

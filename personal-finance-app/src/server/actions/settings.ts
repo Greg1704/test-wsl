@@ -94,3 +94,23 @@ export async function setMonthlyReportEnabled(input: unknown) {
 
   revalidatePath("/configuracion");
 }
+
+/**
+ * Activa/desactiva el seguimiento de límite de crédito + utilización
+ * (`User.trackCreditLimits`). Apagado ⇒ no se muestran límites, barras ni alertas, y las
+ * compras no piden cotización. El `userId` SIEMPRE viene de la sesión. Revalida las vistas
+ * que dependen del flag (config, tarjetas, dashboard).
+ */
+export async function setTrackCreditLimits(input: unknown) {
+  const user = await requireUser();
+  const enabled = z.boolean().parse(input);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { trackCreditLimits: enabled },
+  });
+
+  revalidatePath("/configuracion");
+  revalidatePath("/tarjetas");
+  revalidatePath("/dashboard");
+}

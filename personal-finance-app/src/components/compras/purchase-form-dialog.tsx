@@ -15,6 +15,7 @@ import { currencyToCents, formatMoney } from "@/server/lib/money";
 import { formatDate } from "@/server/lib/dates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -57,7 +58,14 @@ const NO_CATEGORY = "__none__";
 export type PurchaseFormCard = Pick<
   Card,
   "id" | "type" | "name" | "bank" | "last4" | "currencies" | "closingDay" | "dueDay"
->;
+> & {
+  /**
+   * Si la tarjeta tiene límite de crédito cargado. Deriva de `creditLimitCents != null`
+   * en el server (no cruzamos el BigInt al cliente). Con el seguimiento activo, dispara el
+   * modal de conversión cuando la compra es en otra moneda que la principal del usuario.
+   */
+  hasCreditLimit: boolean;
+};
 export type PurchaseFormCategory = Pick<Category, "id" | "name">;
 
 type Props = {
@@ -65,11 +73,24 @@ type Props = {
   categories: PurchaseFormCategory[];
   /** Moneda principal del usuario (Configuración): default de la compra. */
   defaultCurrency: "ARS" | "USD";
+  /** Seguimiento de límite de crédito activo: habilita el modal de conversión. */
+  trackCreditLimits?: boolean;
   trigger: React.ReactNode;
 };
 
-export function PurchaseFormDialog({ cards, categories, defaultCurrency, trigger }: Props) {
+export function PurchaseFormDialog({
+  cards,
+  categories,
+  defaultCurrency,
+  trackCreditLimits = false,
+  trigger,
+}: Props) {
   const [open, setOpen] = useState(false);
+  // Compra pendiente de cotización: se llena cuando la compra a crédito es en otra moneda
+  // que la principal y la tarjeta tiene límite (submit en dos fases). Abre el modal de
+  // conversión; al confirmar con la tasa se envía. null = no hay conversión pendiente.
+  const [pendingPayload, setPendingPayload] = useState<PurchaseFormValues | null>(null);
+  const [rateInput, setRateInput] = useState("");
 
   const creditCards = cards.filter((c) => c.type === "CREDIT");
   const debitCards = cards.filter((c) => c.type === "DEBIT");
@@ -176,6 +197,22 @@ export function PurchaseFormDialog({ cards, categories, defaultCurrency, trigger
     currency,
   ]);
 
+  // Envía la compra al server y limpia el form. Reutilizado por el submit directo y por
+  // la confirmación del modal de conversión (que agrega `limitRate` al payload).
+  async function submitPayload(payload: PurchaseFormValues) {
+    try {
+      await createPurchase(payload);
+      toast.success(payload.paymentMethod === "CREDIT" ? "Compra registrada" : "Gasto registrado");
+      form.reset(defaultValues);
+      setPendingPayload(null);
+      setOpen(false);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "No pudimos registrar el movimiento. Intentá de nuevo."
+      );
+    }
+  }
+
   async function onSubmit(raw: PurchaseFormValues) {
     // Los opcionales vacíos se mandan como undefined (no como "").
     const payload: PurchaseFormValues = {
@@ -188,17 +225,43 @@ export function PurchaseFormDialog({ cards, categories, defaultCurrency, trigger
       totalInstallments: raw.paymentMethod === "CREDIT" ? raw.totalInstallments : 1,
     };
 
-    try {
-      await createPurchase(payload);
-      toast.success(isCredit ? "Compra registrada" : "Gasto registrado");
-      form.reset(defaultValues);
-      setOpen(false);
-    } catch {
-      toast.error("No pudimos registrar el movimiento. Intentá de nuevo.");
+    // ¿Necesita cotización? Solo compra a crédito, con seguimiento activo, tarjeta con
+    // límite y moneda distinta a la principal. En ese caso, pasamos al modal de conversión
+    // en vez de enviar (el rate se agrega ahí). El server revalida esta misma condición.
+    const card = cards.find((c) => c.id === payload.cardId);
+    const needsConversion =
+      trackCreditLimits &&
+      payload.paymentMethod === "CREDIT" &&
+      !!card?.hasCreditLimit &&
+      payload.currency !== defaultCurrency;
+
+    if (needsConversion) {
+      setRateInput("");
+      setPendingPayload(payload);
+      return;
     }
+    await submitPayload(payload);
   }
 
+  async function confirmConversion() {
+    if (!pendingPayload) return;
+    const rate = Number(rateInput);
+    if (!Number.isFinite(rate) || rate <= 0) {
+      toast.error("Ingresá una cotización válida.");
+      return;
+    }
+    await submitPayload({ ...pendingPayload, limitRate: rate });
+  }
+
+  // Monto convertido a la moneda principal para el preview del modal de conversión.
+  const pendingRate = Number(rateInput);
+  const convertedPreview =
+    pendingPayload && Number.isFinite(pendingRate) && pendingRate > 0
+      ? formatMoney(currencyToCents(pendingPayload.totalAmount * pendingRate), defaultCurrency)
+      : null;
+
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(o) => {
@@ -540,5 +603,59 @@ export function PurchaseFormDialog({ cards, categories, defaultCurrency, trigger
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* Modal de conversión: la compra es en una moneda distinta a la principal y la
+        tarjeta tiene límite. Pide la cotización para imputarla al límite de crédito
+        (snapshot en Purchase.limitRate). Cancelar vuelve al form sin enviar. */}
+    <Dialog
+      open={pendingPayload != null}
+      onOpenChange={(o) => {
+        if (!o) setPendingPayload(null);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cotización para el límite</DialogTitle>
+          <DialogDescription>
+            Esta compra es en {pendingPayload?.currency} pero tu límite de crédito está en{" "}
+            {defaultCurrency}. Ingresá la cotización para sumarla al uso del límite.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-3">
+          <div className="grid gap-2">
+            <Label htmlFor="limit-rate">
+              1 {pendingPayload?.currency} = ? {defaultCurrency}
+            </Label>
+            <Input
+              id="limit-rate"
+              type="number"
+              inputMode="decimal"
+              step="0.000001"
+              min="0"
+              placeholder="0,00"
+              value={rateInput}
+              onChange={(e) => setRateInput(e.target.value)}
+              autoFocus
+            />
+          </div>
+          {convertedPreview && (
+            <p className="text-muted-foreground text-sm">
+              La compra impacta el límite como <span className="text-foreground font-medium">{convertedPreview}</span>.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setPendingPayload(null)}>
+            Cancelar
+          </Button>
+          <Button onClick={confirmConversion} disabled={form.formState.isSubmitting}>
+            Confirmar y registrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

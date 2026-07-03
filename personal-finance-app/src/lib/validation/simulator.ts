@@ -21,6 +21,15 @@ export const simulatorSchema = z
       .number()
       .positive("El total con recargo debe ser mayor a 0")
       .optional(),
+    /**
+     * Cotización para proyectar la utilización del límite cuando la compra simulada es en
+     * otra moneda que la principal (moneda del límite por 1 de la compra). Solo se pide en
+     * ese caso; no afecta el flujo de cuotas, solo la barra de límite.
+     */
+    limitRate: z
+      .number()
+      .positive("La cotización debe ser mayor a 0")
+      .optional(),
   })
   .refine((d) => d.financedTotal == null || d.financedTotal >= d.totalAmount, {
     path: ["financedTotal"],

@@ -56,7 +56,7 @@ model Card {
   closingDay Int        // día del mes de cierre (1-31)
   dueDay     Int        // día del mes de vencimiento (1-31)
   currencies String[]   @default(["ARS"]) // monedas que opera la tarjeta (ARS y/o USD)
-  creditLimitCents BigInt? // límite de crédito (centavos, moneda principal = currencies[0]); solo crédito
+  creditLimitCents BigInt? // límite de crédito (centavos, en User.defaultCurrency); opcional, solo crédito
   isActive   Boolean    @default(true)
   createdAt  DateTime   @default(now())
 
@@ -157,6 +157,32 @@ crédito y débito.
 - **Validación server (`createPurchase`):** la moneda de la compra debe pertenecer a
   `card.currencies` (la Server Action es un endpoint público; no alcanza con restringir el
   select del cliente). Sin tarjeta (transferencia/efectivo) la moneda es libre (ARS/USD).
+
+### Límite de crédito y utilización (opt-in, `User.trackCreditLimits`)
+
+Segundo eje del crédito: cuánto del límite de cada tarjeta está comprometido en cuotas no
+pagadas. Es **opt-in** por usuario (`User.trackCreditLimits`, toggle en Configuración,
+apagado por defecto) para no forzar a nadie a cargar límites ni cotizaciones. Lógica pura en
+`src/server/lib/card-utilization.ts` (`utilizationPercent`, `utilizationLevel`,
+`convertCents`), testeada; agregación en `getCardsUtilization`.
+
+- **El límite vive en la moneda principal del USUARIO** (`User.defaultCurrency`), no en la de
+  la tarjeta. Es un **tope único** por tarjeta (`Card.creditLimitCents`, opcional): así se
+  evita la fragilidad de elegir una "moneda principal" de la tarjeta cuando opera varias. El
+  límite es opcional incluso en crédito (con el seguimiento activo, se puede dejar vacío por
+  tarjeta y esa tarjeta no muestra barra).
+- **Conversión al gastar en otra moneda (snapshot).** Si una compra a crédito es en una
+  moneda distinta a la principal y la tarjeta tiene límite, al confirmar se pide la
+  **cotización** (modal en `PurchaseFormDialog`) y se guarda en `Purchase.limitRate`
+  (`Decimal(18,6)`: unidades de la principal por 1 de la moneda de la compra). Es un
+  **snapshot inmutable**, igual que un banco fija el monto convertido al momento del gasto:
+  la barra no se mueve cuando cambia el dólar. `getCardsUtilization` suma las cuotas no
+  pagadas convirtiendo las de otra moneda con su `limitRate`.
+- **Validación server (`createPurchase`):** si `trackCreditLimits` + tarjeta con límite +
+  moneda ≠ principal ⇒ `limitRate` es **requerido** (endpoint público; se revalida aunque el
+  modal ya lo haya pedido).
+- **Compras en otra moneda sin `limitRate`** (previas a la feature) se **excluyen** del uso:
+  no se puede inventar la tasa retroactivamente.
 
 ## Lógica clave: generar cuotas
 

@@ -127,6 +127,33 @@
   --sidebar-ring: oklch(0.596 0.145 163.225);
 }
 
+/* Scrollbar sutil, opt-in (ej. cuerpo scrolleable de un modal alto). Usa los tokens
+   del tema con baja opacidad y track transparente para fundirse con el fondo, y se
+   adapta a claro/oscuro solo (muted-foreground ya cambia por tema). El thumb usa un
+   borde transparente + background-clip: padding-box para verse fino y despegado del
+   borde en vez de un bloque macizo. */
+@utility scrollbar-subtle {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent) transparent;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-color: color-mix(in oklch, var(--muted-foreground) 28%, transparent);
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
