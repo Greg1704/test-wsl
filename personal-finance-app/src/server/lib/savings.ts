@@ -41,16 +41,23 @@ export type SavingsInput = {
   savingsCuotas: { paidAt: Date; amountCents: bigint }[];
   /** Mes objetivo (cualquier día; se usa su mes calendario). */
   month: Date;
-  /** Total de cuotas de crédito que vencen en `month` (para la proyección "después"). */
+  /** Total de cuotas/suscripciones que vencen en `month` (para la proyección "después"). */
   committedThisMonthCents: bigint;
+  /**
+   * Comprometido de este mes ya PAGADO sin usar ahorros (cuotas/suscripciones marcadas pagas
+   * con "De ahorros" desmarcado): se suma de vuelta al "tras cuotas", porque ese gasto no sale
+   * del ahorro. Default 0.
+   */
+  paidNotFromSavingsThisMonthCents?: bigint;
 };
 
 export type SavingsOverview = {
   /** Ahorro disponible este mes ANTES de pagar las cuotas del mes. */
   beforeCents: bigint;
-  /** Proyección: ahorro si TODAS las cuotas del mes salieran del ahorro (decisión de producto). */
+  /** Proyección: ahorro si pagás lo que FALTA del mes desde el ahorro. Lo ya pagado sin ahorros
+   *  no lo reduce; lo ya pagado desde ahorros ya bajó `currentReal`. */
   afterCents: bigint;
-  /** Saldo real a hoy: solo descuenta las cuotas del mes ya marcadas pagadas-desde-ahorros. */
+  /** Saldo real a hoy: descuenta las cuotas/suscripciones del mes ya marcadas pagadas-desde-ahorros. */
   currentRealCents: bigint;
 };
 
@@ -75,8 +82,8 @@ export function incomeForMonth(entries: IncomeEntryInput[], month: Date): bigint
 
 /**
  * Computa el ahorro de una moneda para el mes objetivo: `before` (antes de las cuotas
- * del mes), `after` (proyección restando todas las cuotas del mes) y `currentReal`
- * (saldo real, descontando solo las cuotas ya pagadas-desde-ahorros este mes).
+ * del mes), `after` (proyección restando lo que FALTA del mes, sin lo ya pagado sin ahorros)
+ * y `currentReal` (saldo real, descontando lo del mes ya pagado-desde-ahorros).
  *
  * Acumula mes a mes desde el ancla: hacia adelante suma `ingreso − gastos no-crédito −
  * cuotas-desde-ahorros`; hacia atrás (navegar a un mes previo al ancla) lo resta. La
@@ -91,6 +98,7 @@ export function computeSavings(input: SavingsInput): SavingsOverview {
     savingsCuotas,
     month,
     committedThisMonthCents,
+    paidNotFromSavingsThisMonthCents = 0n,
   } = input;
 
   const targetIdx = monthIndex(month);
@@ -165,7 +173,11 @@ export function computeSavings(input: SavingsInput): SavingsOverview {
 
   const beforeCents = baseAmount + incomeContribution - expenseSum - cuotaSumBeforeTarget;
   const currentRealCents = beforeCents - cuotaSumThisMonth;
-  const afterCents = beforeCents - committedThisMonthCents;
+  // "Tras cuotas": resta TODO lo comprometido del mes y devuelve lo que ya se pagó SIN ahorros
+  // (ese gasto no sale del ahorro). Lo pagado desde ahorros queda restado (está en committed) y
+  // además ya bajó `currentReal`.
+  const afterCents =
+    beforeCents - committedThisMonthCents + paidNotFromSavingsThisMonthCents;
 
   return { beforeCents, afterCents, currentRealCents };
 }

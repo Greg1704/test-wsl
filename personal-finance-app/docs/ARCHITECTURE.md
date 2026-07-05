@@ -347,6 +347,66 @@ El dashboard muestra, por moneda:
 Todo entero (BigInt) y por moneda (ARS/USD nunca se mezclan, RF-9.1). El bucketing por
 mes usa año/mes calendario (TZ-safe, igual que `buildProjection`).
 
+## Suscripciones / gastos recurrentes
+
+Cargos mensuales recurrentes (Netflix, Spotify…). Una suscripción es una **entidad hermana
+de `Purchase`**, no una compra: se paga por **crédito o débito** (efectivo/transferencia
+fuera por ahora). Ver el detalle de decisiones en `docs/BACKLOG.md` #6.
+
+### Modelo híbrido: definición + overrides dispersos
+
+Los cobros de cada mes **no se materializan** (eso exigiría un cron infinito): se computan al
+vuelo desde la definición. Solo se persisten las **desviaciones**. Dos modelos:
+
+- `Subscription` — la definición viva: `amountCents`/`currency`, `paymentMethod`
+  (`CREDIT | DEBIT`), `cardId?` (requerido si crédito), `firstChargeDate` (ancla de
+  recurrencia: define el día del cobro y desde qué mes corre), `endDate?` (baja **inclusive**),
+  `limitRate?` (cotización snapshot, igual que `Purchase.limitRate`, para crédito en moneda ≠
+  principal).
+- `SubscriptionCharge` — override **disperso** (único `(subscriptionId, periodMonth)`): existe
+  **solo** cuando el usuario toca un mes (marcarlo `PAID` o `SKIPPED`). Sin fila ⇒ el mes está
+  **pendiente, contado, al monto de la definición**.
+
+La expansión es una **función pura testeada** (`src/server/lib/subscriptions.ts` →
+`expandSubscriptions`): dada la ventana `[from, to]`, arranca en `max(from, firstChargeDate)`,
+termina en `min(to, endDate)`, y clampea el día al último del mes en meses cortos (cobro el 31
+→ 28/29 de febrero). Las lecturas/agregaciones compartidas viven en
+`src/server/queries/subscriptions.ts` (no en `actions/`, para no exponer `userId` como
+endpoint — mismo patrón que `queries/monthly-overview.ts`).
+
+### Ahorro: todo va al balde "tras cuotas" (`afterCents`)
+
+Decisión de producto: un cobro de suscripción es **una cuota más**. Aunque sea débito, se paga
+**en** su fecha (la suscripción sigue activa hasta ahí), no antes ⇒ **no** baja `beforeCents`.
+El marcado de pago/salteo es **manual** (el servicio puede darse de baja o pagarse más tarde;
+no se auto-marca al pasar la fecha). Consecuencia elegante: el motor `computeSavings` **no
+cambia** — `getSavingsOverview` solo lo alimenta con inputs más ricos: los cobros no salteados
+del mes se suman a `committedThisMonthCents`, y los pagados-desde-ahorros a `savingsCuotas`
+(reducen el saldo real del mes y el ahorro disponible de los meses siguientes, igual que una
+cuota pagada).
+
+### Crédito: pesa en utilización y calendario vía cobros virtuales (no se materializa)
+
+Se descartó crear una `Purchase` al pagar (nacería siempre `PAID` ⇒ no aportaría a utilización
+ni a calendario futuro, y sumaba dedupe/reversa). En cambio se alimentan las funciones de
+crédito existentes con los cobros virtuales:
+
+- **Utilización** (`getCardsUtilization`): una suscripción **no** compromete su límite a futuro
+  como una compra en N cuotas (que imputa todo el capital desde el día 1). Cada mes postea su
+  propio cargo, así que pesa **solo por el cobro del mes corriente no pagado**
+  (`getSubscriptionUtilizationByCard`, acotado a `periodMonth == mes actual`), convertido con
+  `limitRate` si está en otra moneda (se excluye si no la tiene). Reusa
+  `utilizationPercent`/`convertCents`.
+- **Calendario**: muestra los cobros del mes (incluidos futuros al navegar) como preview de
+  flujo, unificados con las cuotas reales y visualmente distintos (ícono recurrente).
+
+### UI
+
+Página `/suscripciones` (CRUD + gestión de los próximos 6 cobros con toggles pago/salteo),
+subsección **"Suscripciones"** en el dashboard (cobros del mes por moneda, % del ingreso,
+mayor a menor) y los cobros en el calendario. El hint de "Ahorro tras cuotas" pasa a
+"…las cuotas **y suscripciones**" cuando hay cobros del mes.
+
 ## Deployment
 
 > **Postura actual (MVP):** la app se deploya en **Vercel** (la plataforma nativa de

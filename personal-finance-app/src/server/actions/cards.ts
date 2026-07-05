@@ -8,6 +8,7 @@ import { cardSchema, renewCardSchema } from "@/lib/validation/card";
 import { parseExpiration, startOfToday } from "@/server/lib/dates";
 import { currencyToCents } from "@/server/lib/money";
 import { utilizationPercent, convertCents } from "@/server/lib/card-utilization";
+import { getSubscriptionUtilizationByCard } from "@/server/queries/subscriptions";
 import { toCardView, type CardView } from "@/lib/card-view";
 
 /**
@@ -161,6 +162,18 @@ export async function getCardsUtilization(): Promise<CardUtilizationView[]> {
     } else {
       continue; // moneda extranjera sin cotización: no imputable al límite
     }
+    usedByCard.set(cardId, (usedByCard.get(cardId) ?? 0n) + cents);
+  }
+
+  // Suscripciones de crédito: suman el cobro del mes corriente (no pagado) al uso de su
+  // tarjeta, convertido a la moneda principal con su `limitRate`. A diferencia de una compra
+  // en N cuotas, no comprometen su límite a futuro (cada mes postea su propio cargo).
+  const subUsedByCard = await getSubscriptionUtilizationByCard(
+    user.id,
+    mainCurrency,
+    cards.map((c) => c.id)
+  );
+  for (const [cardId, cents] of subUsedByCard) {
     usedByCard.set(cardId, (usedByCard.get(cardId) ?? 0n) + cents);
   }
 
