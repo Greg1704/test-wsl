@@ -24,54 +24,11 @@ tipo de cambio y muestra **un total consolidado** además de las columnas por mo
 - **Esfuerzo:** medio. Ojo con la regla de oro: nunca sumar montos de monedas
   distintas sin convertir explícitamente (ver `.claude/rules/dinero-y-fechas.md`).
 
-### 2. Límite de crédito + utilización de la tarjeta
-
-Agregar `creditLimit` a `Card` y mostrar cuánto del límite está comprometido en
-cuotas futuras (barra de utilización).
-
-- **Por qué:** extiende el eje de crédito; responde "¿me entra otra compra?".
-- **Reutiliza:** el modelo `Card` (columna nueva) y las agregaciones de
-  `Installment` que ya alimentan la proyección. Enchufa lindo con el **simulador**
-  ("si comprás esto, quedás al 85% del límite").
-- **Esfuerzo:** bajo-medio.
-
-> **Estado: implementado.** Seguimiento **opt-in** por usuario (`User.trackCreditLimits`,
-> toggle en Configuración; apagado por defecto para no forzar el problema). Con el
-> seguimiento activo:
-> - El límite (`Card.creditLimitCents`) es **opcional por tarjeta** y se carga SIEMPRE en la
->   **moneda principal del usuario** (`User.defaultCurrency`), no en la de la tarjeta. Esto
->   resuelve la fragilidad de `currencies[0]`: hay un único tope y una única moneda de límite.
-> - Las compras a crédito en **otra moneda** que la principal piden la **cotización al
->   confirmar** (modal de conversión en `PurchaseFormDialog`), que se guarda como snapshot
->   inmutable en `Purchase.limitRate` (unidades de la principal por 1 de la moneda de la
->   compra) — igual que hace un banco: fija el monto convertido al momento del gasto.
-> - `getCardsUtilization` computa el uso en la moneda principal sumando las cuotas no pagadas
->   y convirtiendo las de otra moneda con su `limitRate`. Cálculo puro/testeado
->   (`utilizationPercent`, `utilizationLevel`, `convertCents`), barra inline por tarjeta y
->   alerta ≥ 75% en el dashboard.
->
-> **Decisión de "moneda principal" (resuelta):** en vez de anclar el límite a la moneda de
-> la tarjeta (frágil) o modelar un límite por moneda (caro), el límite es un **tope único en
-> la moneda del usuario** y todo lo demás se convierte hacia él con cotización snapshot. Caso
-> aceptado: una tarjeta USD-only con usuario ARS tendría límite en ARS y toda compra pediría
-> conversión (poco frecuente en AR).
->
-> **Integración con el simulador (hecha):** al simular una compra sobre una tarjeta con
-> límite, el simulador proyecta la utilización **antes → después** ("quedás al 92% del
-> límite"), con la misma barra/colores que Tarjetas, en modo plan único y en la comparación
-> A vs B. Lógica pura `projectUtilization` (reusa `convertCents`/`utilizationPercent`). Si la
-> compra simulada es en otra moneda que el límite, el simulador **pide la cotización** (un
-> input, opción A) para convertirla — mismo criterio que el alta real.
->
-> **Pendiente:**
-> - Compras USD **previas** a la feature (sin `limitRate`) se **excluyen** del uso (no se
->   puede inventar la tasa). A futuro: ofrecer cargar la cotización retroactiva.
-
 ---
 
 ## También vale la pena
 
-### 3. Refinanciación / editar cuota individual (RF-4.5)
+### 2. Refinanciación / editar cuota individual (RF-4.5)
 
 Editar el monto de una cuota puntual (caso AR: refinanciás el saldo de la tarjeta).
 
@@ -79,7 +36,7 @@ Editar el monto de una cuota puntual (caso AR: refinanciás el saldo de la tarje
   agregaciones se recalculan solas. Ya está anotado como Post-MVP en REQUIREMENTS.
 - **Esfuerzo:** bajo (más una decisión de producto: ¿re-reparte el resto o toca solo esa cuota?).
 
-### 4. Import de resumen (CSV/PDF)
+### 3. Import de resumen (CSV/PDF)
 
 Importador del resumen de tarjeta para evitar la carga manual (la fricción #1 de
 estas apps).
@@ -90,7 +47,7 @@ estas apps).
   existentes por `last4`.
 - **Esfuerzo:** alto. Empezar por CSV (más simple y determinista) antes que PDF.
 
-### 5. "Mejor día para comprar"
+### 4. "Mejor día para comprar"
 
 Dado `closingDay`/`dueDay` de la tarjeta, sugerir *"si comprás hoy pagás el 10/08;
 si esperás 2 días, el 10/09"* (maximizar el float).
@@ -99,7 +56,7 @@ si esperás 2 días, el 10/09"* (maximizar el float).
   (`generateInstallments` y el cálculo del primer vencimiento).
 - **Esfuerzo:** bajo. Feature chica y "delightful", muy de mercado AR.
 
-### 6. Liquidación de tarjetas ajenas
+### 5. Liquidación de tarjetas ajenas
 
 Ya existe `Card.owner` (tarjetas de terceros que se deben pagar). Falta el otro lado:
 "cuánto te debe cada persona este mes por sus cuotas".
@@ -107,13 +64,59 @@ Ya existe `Card.owner` (tarjetas de terceros que se deben pagar). Falta el otro 
 - **Reutiliza:** `Card.owner` + agregaciones de `Installment` por tarjeta/mes.
 - **Esfuerzo:** medio. Cierra una feature que quedó a medio modelar.
 
-### 7. Suscripciones / gastos recurrentes
+### 6. Suscripciones / gastos recurrentes
 
-Cargos mensuales automáticos (Netflix, Spotify…) que impactan el disponible neto sin
+Cargos mensuales recurrentes (Netflix, Spotify…) que impactan el disponible neto sin
 recargarlos a mano cada mes.
 
-- **Reutiliza:** el eje de gastos no-crédito y el bucketing por mes de savings.
-- **Esfuerzo:** medio (modelo de recurrencia + generación de los cargos del mes).
+- **Reutiliza:** el eje de crédito (utilización, calendario) y el motor de ahorro
+  (`computeSavings`), sin tocar la función pura.
+- **Esfuerzo:** medio.
+
+> **Estado: implementado.** Detalle técnico en `docs/ARCHITECTURE.md` → "Suscripciones /
+> gastos recurrentes". Decisiones tomadas (se conservan acá como registro):
+>
+> Una suscripción es una **entidad hermana de `Purchase`**, no una compra: se paga por
+> **crédito o débito** (efectivo/transferencia quedan fuera por ahora).
+>
+> **1. Modelo híbrido (definición + overrides dispersos).** No se materializa una fila por
+> mes (eso exigiría un cron infinito). Dos tablas:
+> - `Subscription` — la definición viva: `name`, `amountCents`/`currency`, `paymentMethod`
+>   (`CREDIT | DEBIT`), `cardId?` (requerido si `CREDIT`), `firstChargeDate` (ancla de
+>   recurrencia: 7 jun → 7 jul → …), `endDate?` (baja), `categoryId?`, `limitRate?`
+>   (`Decimal(18,6)`, solo crédito en moneda ≠ principal, snapshot al crear).
+> - `SubscriptionCharge` — override **disperso**, una fila **solo cuando el usuario toca un
+>   mes**: `(subscriptionId, periodMonth)` único, `status` (`PAID | SKIPPED`),
+>   `paidFromSavings`, `paidAt?`, `amountCentsOverride?`. Sin fila ⇒ mes **pendiente,
+>   contado, al monto de la definición**. `SKIPPED` = "este mes no cuenta".
+> - Función pura `expandSubscriptions(defs, overrides, from, to)` expande y aplica overrides
+>   (caso borde: día 31 en febrero se clampea al último día). Todo BigInt, por moneda.
+>
+> **2. Ahorro: todo va a "tras cuotas" (`afterCents`), como una cuota más.** Aunque sea
+> débito, el cargo se paga **en** su fecha (la suscripción sigue activa hasta ahí), no antes
+> ⇒ no baja `before`. Marcado **manual** de pago/salteo (el servicio puede darse de baja o
+> pagarse más tarde; no se auto-marca al pasar la fecha). Consecuencia elegante: el motor
+> `computeSavings` **no cambia** — la capa de acción une los cobros **no pagados** del mes en
+> `committedThisMonthCents` y los **pagados** en `savingsCuotas`.
+>
+> **3. Crédito: pesa en utilización y calendario vía cobros virtuales (NO se materializa).**
+> Descartado crear una `Purchase` al pagar (nace siempre PAID ⇒ no aportaría a utilización ni
+> a calendario futuro, y sumaba dedupe/reversa). En cambio se alimentan las funciones de
+> crédito existentes con los cobros virtuales:
+> - **Utilización** (`getCardsUtilization`): una suscripción **no** es como una compra en N
+>   cuotas (que compromete todo el capital desde el día 1). Cada mes postea su propio cobro,
+>   así que los meses futuros **aún no ocupan** el límite. Pesa solo por cobros con
+>   `periodMonth ≤ mes actual` sin marca de pago (≈ el cobro corriente), convertidos con
+>   `limitRate`. Reusa `utilizationPercent`/`convertCents`.
+> - **Calendario**: ahí sí se muestran los cobros **futuros** (3-6 meses) como preview de
+>   flujo, visualmente distintos (recurrentes/estimados) de las cuotas reales.
+>
+> **4. Subsección "Suscripciones" en el dashboard** (junto a crédito y ahorro): lista de
+> suscripciones activas, % del ingreso que comprometen (dentro de cada moneda; consolidar
+> multi-moneda espera a la feature de "moneda display" #1) y orden de mayor a menor costo.
+>
+> **5. CRUD** con botón "Gestionar suscripciones" (separado del de cuotas): crear/editar/
+> borrar + ver 3-6 cobros futuros con toggles de pago/salteo por mes.
 
 ---
 

@@ -24,6 +24,7 @@ import {
 } from "@/server/actions/dashboard";
 import { computeDisplayStatus } from "@/server/lib/installment-status";
 import { getCardsUtilization } from "@/server/actions/cards";
+import { getSubscriptionsOverview } from "@/server/actions/subscriptions";
 import { completedSteps } from "@/server/lib/onboarding";
 import { WARNING_THRESHOLD } from "@/server/lib/card-utilization";
 import { percentOfIncome } from "@/server/lib/dashboard";
@@ -35,6 +36,7 @@ import {
   formatMonthParam,
   formatMonthYear,
   monthParamToDate,
+  startOfMonth,
 } from "@/server/lib/dates";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MonthInstallmentsDialog } from "@/components/compras/month-installments-dialog";
+import { MonthSubscriptionsDialog } from "@/components/suscripciones/month-subscriptions-dialog";
 import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist";
 import { NextStepBanner } from "@/components/dashboard/next-step-banner";
 import { CardLimitsAlert } from "@/components/dashboard/card-limits-alert";
@@ -88,6 +91,7 @@ export default async function DashboardPage({
     savingsProjection,
     nonCreditBreakdown,
     cardsUtilization,
+    subscriptionsOverview,
   ] = await Promise.all([
     getMonthlyOverview(month),
     listInstallmentsByMonth(month),
@@ -98,6 +102,7 @@ export default async function DashboardPage({
     getSavingsProjection(month, PROJECTION_MONTHS),
     getNonCreditBreakdown(month),
     getCardsUtilization(),
+    getSubscriptionsOverview(month),
   ]);
 
   // Tarjetas cerca (o por encima) de su límite: solo la señal, la barra vive en /tarjetas.
@@ -112,6 +117,7 @@ export default async function DashboardPage({
     new Set([
       ...overview.currencies.map((c) => c.currency),
       ...savings.currencies.map((s) => s.currency),
+      ...subscriptionsOverview.currencies.map((s) => s.currency),
     ])
   ).sort((a, b) => (a === defaultCurrency ? -1 : b === defaultCurrency ? 1 : 0));
 
@@ -131,6 +137,16 @@ export default async function DashboardPage({
       (typeof savings.currencies)[number]);
   const debt = debtStats.find((d) => d.currency === currency);
   const committedPercent = percentOfIncome(main.committedCents, main.incomeCents);
+
+  // Suscripciones de la moneda seleccionada (subsección + hint del ahorro tras cuotas).
+  const subsForCurrency = subscriptionsOverview.currencies.find(
+    (c) => c.currency === currency
+  );
+  const subsPercent = percentOfIncome(
+    subsForCurrency?.totalCents ?? 0n,
+    subsForCurrency?.incomeCents ?? null
+  );
+  const hasSubs = (subsForCurrency?.items.length ?? 0) > 0;
 
   // DTOs planos para los charts (Client Components): nada de BigInt ni Date.
   const projSerie = projection.find((p) => p.currency === currency);
@@ -179,6 +195,18 @@ export default async function DashboardPage({
     amount: formatMoney(i.amountCents, i.currency),
     status: computeDisplayStatus(i.status, i.dueDate),
   }));
+
+  // Suscripciones del mes (todas las monedas) para el modal "Gestionar suscripciones".
+  const subscriptionChargeViews = subscriptionsOverview.currencies.flatMap((c) =>
+    c.items.map((it) => ({
+      subscriptionId: it.subscriptionId,
+      name: it.name,
+      cardName: it.cardName,
+      amount: formatMoney(it.amountCents, c.currency),
+      status: it.status,
+    }))
+  );
+  const monthStartIso = startOfMonth(month).toISOString();
 
   const monthLabel = formatMonthYear(month);
   // Hrefs que preservan moneda + mes al navegar/cambiar de facet.
@@ -248,6 +276,13 @@ export default async function DashboardPage({
               installments={installmentViews}
             />
           )}
+          {subscriptionChargeViews.length > 0 && (
+            <MonthSubscriptionsDialog
+              monthLabel={monthLabel}
+              periodMonth={monthStartIso}
+              subscriptions={subscriptionChargeViews}
+            />
+          )}
         </div>
       </div>
 
@@ -300,8 +335,9 @@ export default async function DashboardPage({
         <KpiCard
           title="Ahorro disponible"
           icon={PiggyBank}
-          value={formatMoney(sav.beforeCents, currency)}
-          hint="Saldo guardado este mes, antes de las cuotas"
+          variant={sav.currentRealCents < 0n ? "danger" : undefined}
+          value={formatMoney(sav.currentRealCents, currency)}
+          hint="Tus ahorros a día de hoy"
         />
         <KpiCard
           title="Ahorro tras cuotas"
@@ -309,9 +345,9 @@ export default async function DashboardPage({
           variant={sav.afterCents < 0n ? "danger" : undefined}
           value={formatMoney(sav.afterCents, currency)}
           hint={
-            main.committedCents > 0n
-              ? `Si pagás las cuotas del mes desde tu ahorro`
-              : "Sin cuotas este mes"
+            main.committedCents > 0n || hasSubs
+              ? "Tus ahorros tras pagar las cuotas y suscripciones del mes"
+              : "Sin cuotas ni suscripciones este mes"
           }
         />
       </section>
@@ -322,6 +358,7 @@ export default async function DashboardPage({
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="credito">Crédito</TabsTrigger>
           <TabsTrigger value="ahorro">Ahorro</TabsTrigger>
+          <TabsTrigger value="suscripciones">Suscripciones</TabsTrigger>
         </TabsList>
 
         {/* RESUMEN: lo transversal — próximos vencimientos y otras monedas. */}
@@ -394,7 +431,7 @@ export default async function DashboardPage({
                     <span>
                       Ahorro disponible:{" "}
                       <span className="text-foreground font-medium">
-                        {formatMoney(s.beforeCents, c)}
+                        {formatMoney(s.currentRealCents, c)}
                       </span>
                     </span>
                   )}
@@ -512,6 +549,61 @@ export default async function DashboardPage({
                 <p className="text-muted-foreground py-10 text-center text-sm">
                   No registraste gastos de débito, transferencia o efectivo en {currency}{" "}
                   este mes.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* SUSCRIPCIONES: cargos recurrentes del mes en la moneda seleccionada. */}
+        <TabsContent value="suscripciones" className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Suscripciones · {currency}</CardTitle>
+              <CardDescription className="capitalize">
+                Cargos recurrentes de {monthLabel}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {subsForCurrency && subsForCurrency.items.length > 0 ? (
+                <div className="grid gap-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-2xl font-semibold">
+                      {formatMoney(subsForCurrency.totalCents, currency)}
+                    </span>
+                    {subsPercent !== null && (
+                      <span className="text-muted-foreground text-sm">
+                        {subsPercent.toLocaleString("es-AR")}% de tu ingreso
+                      </span>
+                    )}
+                  </div>
+                  <ul className="grid gap-2">
+                    {subsForCurrency.items.map((it) => (
+                      <li
+                        key={it.subscriptionId}
+                        className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <span className="truncate font-medium">{it.name}</span>
+                        {it.cardName && (
+                          <span className="text-muted-foreground hidden truncate sm:inline">
+                            {it.cardName}
+                          </span>
+                        )}
+                        {it.status === "PAID" && <Badge variant="outline">Pagada</Badge>}
+                        <span className="ml-auto font-medium">
+                          {formatMoney(it.amountCents, currency)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-muted-foreground py-10 text-center text-sm">
+                  No tenés suscripciones en {currency} este mes.{" "}
+                  <Link href="/suscripciones" className="underline">
+                    Agregá una
+                  </Link>
+                  .
                 </p>
               )}
             </CardContent>

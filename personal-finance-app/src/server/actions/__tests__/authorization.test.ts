@@ -30,6 +30,14 @@ vi.mock("@/server/db", () => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     incomeEntry: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
     savingsBalance: { findMany: vi.fn(), upsert: vi.fn() },
+    subscription: {
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    subscriptionCharge: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -554,6 +562,8 @@ describe("dashboard y configuración (Fase 3)", () => {
     vi.mocked(prisma.purchase.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.installment.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.installment.groupBy).mockResolvedValue([] as never);
+    vi.mocked(prisma.subscription.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.subscriptionCharge.findMany).mockResolvedValue([] as never);
 
     const result = await getSavingsOverview(new Date("2026-06-15"));
 
@@ -577,6 +587,7 @@ describe("dashboard y configuración (Fase 3)", () => {
     vi.mocked(prisma.incomeEntry.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.purchase.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.installment.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.subscriptionCharge.findMany).mockResolvedValue([] as never);
 
     const series = await getSavingsProjection(new Date("2026-06-15"), 12);
 

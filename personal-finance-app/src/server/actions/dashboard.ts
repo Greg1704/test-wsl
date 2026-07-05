@@ -14,6 +14,11 @@ import {
   buildSavingsProjection,
 } from "@/server/lib/savings";
 import {
+  getSubscriptionCommittedForMonth,
+  getSubscriptionSavingsCuotas,
+  getSubscriptionPaidNotFromSavingsForMonth,
+} from "@/server/queries/subscriptions";
+import {
   getMonthlyOverviewForUser,
   type MonthlyOverview,
 } from "@/server/queries/monthly-overview";
@@ -64,8 +69,17 @@ export async function getSavingsOverview(month: Date): Promise<SavingsOverview> 
   });
   const defaultCurrency = profile?.defaultCurrency ?? "ARS";
 
-  const [anchors, incomeRows, nonCredit, savingsCuotas, committedGrouped] =
-    await Promise.all([
+  const [
+    anchors,
+    incomeRows,
+    nonCredit,
+    savingsCuotas,
+    committedGrouped,
+    subCommitted,
+    subPaid,
+    cuotaNonSavingsGrouped,
+    subPaidNotSavings,
+  ] = await Promise.all([
       prisma.savingsBalance.findMany({
         where: { userId: user.id },
         select: { currency: true, amountCents: true, asOf: true },
@@ -90,6 +104,21 @@ export async function getSavingsOverview(month: Date): Promise<SavingsOverview> 
         where: { dueDate: { gte, lt }, purchase: { userId: user.id } },
         _sum: { amountCents: true },
       }),
+      // Suscripciones: cobros del mes (balde "tras cuotas") y pagados-desde-ahorros.
+      getSubscriptionCommittedForMonth(user.id, month),
+      getSubscriptionSavingsCuotas(user.id),
+      // Comprometido del mes ya pagado SIN ahorros (cuotas + suscripciones): vuelve al "tras cuotas".
+      prisma.installment.groupBy({
+        by: ["currency"],
+        where: {
+          dueDate: { gte, lt },
+          status: "PAID",
+          paidFromSavings: false,
+          purchase: { userId: user.id },
+        },
+        _sum: { amountCents: true },
+      }),
+      getSubscriptionPaidNotFromSavingsForMonth(user.id, month),
     ]);
 
   // Agrupados por moneda en memoria.
@@ -110,12 +139,35 @@ export async function getSavingsOverview(month: Date): Promise<SavingsOverview> 
     committedGrouped.map((g) => [g.currency, g._sum.amountCents ?? 0n])
   );
 
-  // Monedas a mostrar: la principal + cualquiera con ancla, ingreso o gasto no-crédito.
+  // Suscripciones (decisión de producto: van al balde "tras cuotas", como una cuota más).
+  // Los cobros del mes se suman al comprometido; los pagados-desde-ahorros, a savingsCuotas.
+  // El motor `computeSavings` no cambia: solo recibe inputs más ricos.
+  for (const [currency, cents] of subCommitted) {
+    committedByCurrency.set(currency, (committedByCurrency.get(currency) ?? 0n) + cents);
+  }
+  for (const p of subPaid) {
+    const list = cuotaByCurrency.get(p.currency) ?? [];
+    list.push({ currency: p.currency, paidAt: p.paidAt, amountCents: p.amountCents });
+    cuotaByCurrency.set(p.currency, list);
+  }
+
+  // Comprometido del mes ya pagado SIN ahorros (cuotas + suscripciones): vuelve al "tras cuotas".
+  const pNonByCurrency = new Map(
+    cuotaNonSavingsGrouped.map((g) => [g.currency, g._sum.amountCents ?? 0n])
+  );
+  for (const [currency, cents] of subPaidNotSavings) {
+    pNonByCurrency.set(currency, (pNonByCurrency.get(currency) ?? 0n) + cents);
+  }
+
+  // Monedas a mostrar: la principal + cualquiera con ancla, ingreso, gasto no-crédito o
+  // suscripción (una moneda puede tener solo suscripciones).
   const currencySet = new Set<string>([
     defaultCurrency,
     ...anchorByCurrency.keys(),
     ...incomeByCurrency.keys(),
     ...expenseByCurrency.keys(),
+    ...subCommitted.keys(),
+    ...subPaid.map((p) => p.currency),
   ]);
 
   const currencies: SavingsCurrencyOverview[] = [];
@@ -137,6 +189,7 @@ export async function getSavingsOverview(month: Date): Promise<SavingsOverview> 
       })),
       month,
       committedThisMonthCents: committedByCurrency.get(currency) ?? 0n,
+      paidNotFromSavingsThisMonthCents: pNonByCurrency.get(currency) ?? 0n,
     });
     currencies.push({ currency, ...result });
   }
@@ -171,7 +224,7 @@ export async function getSavingsProjection(
   });
   const defaultCurrency = profile?.defaultCurrency ?? "ARS";
 
-  const [anchors, incomeRows, nonCredit, savingsCuotas] = await Promise.all([
+  const [anchors, incomeRows, nonCredit, savingsCuotas, subPaid] = await Promise.all([
     prisma.savingsBalance.findMany({
       where: { userId: user.id },
       select: { currency: true, amountCents: true, asOf: true },
@@ -188,6 +241,7 @@ export async function getSavingsProjection(
       where: { purchase: { userId: user.id }, paidFromSavings: true, status: "PAID" },
       select: { currency: true, paidAt: true, amountCents: true },
     }),
+    getSubscriptionSavingsCuotas(user.id),
   ]);
 
   const byCurrency = <T extends { currency: string }>(rows: T[]) => {
@@ -204,11 +258,21 @@ export async function getSavingsProjection(
   const expenseByCurrency = byCurrency(nonCredit);
   const cuotaByCurrency = byCurrency(savingsCuotas.filter((c) => c.paidAt));
 
+  // Suscripciones pagadas-desde-ahorros: reducen el ahorro disponible de los meses siguientes
+  // (mismo tratamiento que una cuota pagada). Los cobros PENDIENTES no entran en la proyección
+  // del disponible, igual que las cuotas pendientes — es la línea "antes de cuotas".
+  for (const p of subPaid) {
+    const list = cuotaByCurrency.get(p.currency) ?? [];
+    list.push({ currency: p.currency, paidAt: p.paidAt, amountCents: p.amountCents });
+    cuotaByCurrency.set(p.currency, list);
+  }
+
   const currencySet = new Set<string>([
     defaultCurrency,
     ...anchorByCurrency.keys(),
     ...incomeByCurrency.keys(),
     ...expenseByCurrency.keys(),
+    ...subPaid.map((p) => p.currency),
   ]);
 
   const series: SavingsProjectionSeries[] = [];

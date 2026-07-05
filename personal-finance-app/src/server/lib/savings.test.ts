@@ -79,6 +79,18 @@ describe("computeSavings", () => {
     expect(r.afterCents).toBe(140_000n);
   });
 
+  it("una cuota/suscripción pagada SIN ahorros sube el 'tras cuotas'", () => {
+    const withoutFlag = computeSavings(base({ committedThisMonthCents: 60_000n }));
+    const withNonSavings = computeSavings(
+      base({ committedThisMonthCents: 60_000n, paidNotFromSavingsThisMonthCents: 15_000n })
+    );
+    // Lo pagado por fuera del ahorro no lo reduce → "tras cuotas" sube esos 15.000.
+    expect(withNonSavings.afterCents).toBe(withoutFlag.afterCents + 15_000n);
+    // No toca `before` ni `currentReal` (no salió del ahorro).
+    expect(withNonSavings.beforeCents).toBe(withoutFlag.beforeCents);
+    expect(withNonSavings.currentRealCents).toBe(withoutFlag.currentRealCents);
+  });
+
   it("descuenta un gasto del MISMO mes del ancla, posterior a asOf (regресión)", () => {
     // El usuario declara su ahorro el 2026-03-01 y gasta el 2026-03-20: el gasto debe
     // restarse aunque caiga en el mes del ancla (no quedar "absorbido" por el saldo).
