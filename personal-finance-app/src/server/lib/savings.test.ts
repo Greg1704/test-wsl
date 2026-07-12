@@ -120,6 +120,27 @@ describe("computeSavings", () => {
     expect(r.beforeCents).toBe(100_000n);
   });
 
+  it("distingue cuotas del MISMO día por hora respecto del instante del ancla (regresión)", () => {
+    // Bug real: pagás una cuota y después reanclás tus ahorros al saldo ya rebajado. Con el
+    // ancla a un INSTANTE (no medianoche), la cuota pagada ANTES de reanclar queda del lado
+    // "ya reflejado" (no se resta de nuevo) y la pagada DESPUÉS sí se descuenta.
+    const r = computeSavings(
+      base({
+        anchor: { amountCents: 100_000n, asOf: new Date(2026, 2, 12, 12, 0) }, // 2026-03-12 12:00
+        incomeEntries: [],
+        month: m(2026, 3),
+        committedThisMonthCents: 0n,
+        savingsCuotas: [
+          { paidAt: new Date(2026, 2, 12, 11, 50), amountCents: 20_000n }, // antes de reanclar
+          { paidAt: new Date(2026, 2, 12, 12, 10), amountCents: 5_000n }, //  después de reanclar
+        ],
+      })
+    );
+    // La de las 11:50 NO se resta (ya está en los 100.000 declarados); la de las 12:10 sí.
+    expect(r.currentRealCents).toBe(95_000n); // 100.000 − 5.000
+    expect(r.beforeCents).toBe(100_000n);
+  });
+
   it("sin ancla arranca de 0 desde el primer mes con actividad", () => {
     const r = computeSavings({
       anchor: null,

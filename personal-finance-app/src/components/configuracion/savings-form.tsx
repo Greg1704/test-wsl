@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useForm, type Control, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -21,7 +21,40 @@ import {
 type SavingsFormInitial = {
   savingsArs: number | undefined;
   savingsUsd: number | undefined;
+  /** ISO string del instante de última declaración por moneda, o `null` si nunca se declaró. */
+  updatedArs: string | null;
+  updatedUsd: string | null;
 };
+
+const noopSubscribe = () => () => {};
+
+/**
+ * "Última actualización" de una moneda. El instante se formatea en la TZ REAL del navegador
+ * (no la del server, que corre en UTC), así que el valor difiere server↔cliente. `useSyncExternalStore`
+ * da un snapshot de servidor estable ("…") y otro de cliente (la hora local): React renderiza
+ * primero el de servidor —evitando el hydration mismatch— y recién tras hidratar muestra la hora.
+ */
+function LastUpdated({ iso }: { iso: string | null }) {
+  const isClient = useSyncExternalStore(
+    noopSubscribe,
+    () => true, // cliente
+    () => false // servidor / SSR
+  );
+
+  if (!iso) return <p className="text-muted-foreground text-xs">Sin registro</p>;
+  const text = isClient
+    ? new Date(iso).toLocaleString("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "…";
+  return (
+    <p className="text-muted-foreground text-xs">Última actualización: {text}</p>
+  );
+}
 
 /** Campo de monto editable como texto (vacío permitido, decimales con coma/punto). */
 function MoneyField({
@@ -29,11 +62,13 @@ function MoneyField({
   name,
   label,
   initial,
+  updatedAt,
 }: {
   control: Control<SavingsFormValues>;
   name: FieldPath<SavingsFormValues>;
   label: string;
   initial: number | undefined;
+  updatedAt: string | null;
 }) {
   const [text, setText] = useState(initial != null ? String(initial) : "");
   return (
@@ -63,6 +98,7 @@ function MoneyField({
             />
           </FormControl>
           <FormMessage />
+          <LastUpdated iso={updatedAt} />
         </FormItem>
       )}
     />
@@ -72,7 +108,7 @@ function MoneyField({
 export function SavingsForm({ initial }: { initial: SavingsFormInitial }) {
   const form = useForm<SavingsFormValues>({
     resolver: zodResolver(savingsSchema),
-    defaultValues: initial,
+    defaultValues: { savingsArs: initial.savingsArs, savingsUsd: initial.savingsUsd },
   });
 
   async function onSubmit(values: SavingsFormValues) {
@@ -93,18 +129,21 @@ export function SavingsForm({ initial }: { initial: SavingsFormInitial }) {
             name="savingsArs"
             label="Ahorro actual (ARS)"
             initial={initial.savingsArs}
+            updatedAt={initial.updatedArs}
           />
           <MoneyField
             control={form.control}
             name="savingsUsd"
             label="Ahorro actual (USD)"
             initial={initial.savingsUsd}
+            updatedAt={initial.updatedUsd}
           />
         </div>
 
         <p className="text-muted-foreground text-sm">
-          Tu saldo guardado hoy. Cada mes le sumamos tu ingreso y le restamos los gastos de
-          débito, transferencia y efectivo. Guardar re-ancla el saldo al mes actual.
+          Tu saldo guardado. Cada mes le sumamos tu ingreso y le restamos los gastos de
+          débito, transferencia y efectivo. Guardar re-ancla el saldo al momento actual (lo
+          anterior queda reflejado; solo lo posterior se descuenta).
         </p>
 
         <div>
