@@ -76,10 +76,12 @@ async function loadOverrides(
 }
 
 /**
- * Total comprometido por suscripciones en un mes, por moneda (cobros no salteados). Alimenta
- * el balde "tras cuotas" del ahorro: se une a `committedThisMonthCents` sin tocar el motor.
+ * Total de cobros de suscripción PENDIENTES (sin pagar ni saltear) de un mes, por moneda. Alimenta
+ * `pendingThisMonthCents` del motor de ahorro: es lo único que el "tras cuotas" resta sobre el
+ * saldo real. Lo ya pagado no entra (pagado-desde-ahorros ya bajó el saldo real; pagado sin ahorros
+ * no sale del ahorro), así se evita el doble conteo de los cobros previos al ancla.
  */
-export async function getSubscriptionCommittedForMonth(
+export async function getSubscriptionPendingForMonth(
   userId: string,
   month: Date
 ): Promise<Map<string, bigint>> {
@@ -92,7 +94,7 @@ export async function getSubscriptionCommittedForMonth(
   const occ = expandSubscriptions(defRows.map(toDef), overrides, m, m);
   const map = new Map<string, bigint>();
   for (const o of occ) {
-    if (o.status === "SKIPPED") continue; // salteado: ese mes no cuenta
+    if (o.status !== "PENDING") continue; // pagado ya se contabilizó; salteado no cuenta
     map.set(o.currency, (map.get(o.currency) ?? 0n) + o.amountCents);
   }
   return map;
@@ -121,37 +123,6 @@ export async function getSubscriptionSavingsCuotas(
     paidAt: r.paidAt ?? r.periodMonth,
     amountCents: r.amountCentsOverride ?? r.subscription.amountCents,
   }));
-}
-
-/**
- * Total de cobros de suscripción de un mes PAGADOS SIN usar ahorros, por moneda (solo activas).
- * Se suma de vuelta al "tras cuotas" del ahorro: ese gasto no sale del ahorro. Es un subconjunto
- * de `getSubscriptionCommittedForMonth` (mismo filtro `isActive`).
- */
-export async function getSubscriptionPaidNotFromSavingsForMonth(
-  userId: string,
-  month: Date
-): Promise<Map<string, bigint>> {
-  const m = startOfMonth(month);
-  const { gte, lt } = monthRange(m);
-  const rows = await prisma.subscriptionCharge.findMany({
-    where: {
-      status: "PAID",
-      paidFromSavings: false,
-      periodMonth: { gte, lt },
-      subscription: { userId, isActive: true },
-    },
-    select: {
-      amountCentsOverride: true,
-      subscription: { select: { currency: true, amountCents: true } },
-    },
-  });
-  const map = new Map<string, bigint>();
-  for (const r of rows) {
-    const cents = r.amountCentsOverride ?? r.subscription.amountCents;
-    map.set(r.subscription.currency, (map.get(r.subscription.currency) ?? 0n) + cents);
-  }
-  return map;
 }
 
 /**

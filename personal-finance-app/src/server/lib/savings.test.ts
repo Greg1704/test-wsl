@@ -42,7 +42,7 @@ describe("computeSavings", () => {
     nonCreditExpenses: [],
     savingsCuotas: [],
     month: m(2026, 3),
-    committedThisMonthCents: 0n,
+    pendingThisMonthCents: 0n,
     ...over,
   });
 
@@ -65,30 +65,28 @@ describe("computeSavings", () => {
   });
 
   it("distingue before / after / currentReal con cuotas del mes", () => {
+    // Del mes vencen 60.000: 20.000 ya pagados-desde-ahorros y 40.000 pendientes.
     const r = computeSavings(
       base({
         savingsCuotas: [{ paidAt: m(2026, 3, 10), amountCents: 20_000n }],
-        committedThisMonthCents: 60_000n,
+        pendingThisMonthCents: 40_000n,
       })
     );
-    // Real: cuenta solo la cuota efectivamente pagada (20.000).
+    // Real: descuenta solo la cuota efectivamente pagada (20.000).
     expect(r.currentRealCents).toBe(180_000n);
     // Antes de cuotas: no descuenta ninguna cuota del mes (suma de vuelta la pagada).
     expect(r.beforeCents).toBe(200_000n);
-    // Después: proyecta TODAS las cuotas del mes (60.000).
+    // Después: saldo real − lo que FALTA pagar del mes (40.000) = 140.000.
     expect(r.afterCents).toBe(140_000n);
   });
 
-  it("una cuota/suscripción pagada SIN ahorros sube el 'tras cuotas'", () => {
-    const withoutFlag = computeSavings(base({ committedThisMonthCents: 60_000n }));
-    const withNonSavings = computeSavings(
-      base({ committedThisMonthCents: 60_000n, paidNotFromSavingsThisMonthCents: 15_000n })
-    );
-    // Lo pagado por fuera del ahorro no lo reduce → "tras cuotas" sube esos 15.000.
-    expect(withNonSavings.afterCents).toBe(withoutFlag.afterCents + 15_000n);
-    // No toca `before` ni `currentReal` (no salió del ahorro).
-    expect(withNonSavings.beforeCents).toBe(withoutFlag.beforeCents);
-    expect(withNonSavings.currentRealCents).toBe(withoutFlag.currentRealCents);
+  it("lo ya pagado (desde ahorros o no) no vuelve a bajar el 'tras cuotas'", () => {
+    // 60.000 vencen el mes; si 15.000 ya se pagaron, solo 45.000 siguen pendientes.
+    const allPending = computeSavings(base({ pendingThisMonthCents: 60_000n }));
+    const somedPaid = computeSavings(base({ pendingThisMonthCents: 45_000n }));
+    // Pagar 15.000 (por dentro o fuera del ahorro) sube el "tras cuotas" en esos 15.000:
+    // el saldo real ya reflejó lo que salió del ahorro y lo pagado no se vuelve a restar.
+    expect(somedPaid.afterCents).toBe(allPending.afterCents + 15_000n);
   });
 
   it("descuenta un gasto del MISMO mes del ancla, posterior a asOf (regресión)", () => {
@@ -100,7 +98,7 @@ describe("computeSavings", () => {
         incomeEntries: [{ amountCents: 0n, validFrom: m(2026, 3, 1) }],
         nonCreditExpenses: [{ purchaseDate: m(2026, 3, 20), amountCents: 4_000_00n }],
         month: m(2026, 3),
-        committedThisMonthCents: 0n,
+        pendingThisMonthCents: 0n,
       })
     );
     expect(r.beforeCents).toBe(356_000_00n);
@@ -114,7 +112,7 @@ describe("computeSavings", () => {
         incomeEntries: [],
         nonCreditExpenses: [{ purchaseDate: m(2026, 3, 5), amountCents: 30_000n }],
         month: m(2026, 3),
-        committedThisMonthCents: 0n,
+        pendingThisMonthCents: 0n,
       })
     );
     expect(r.beforeCents).toBe(100_000n);
@@ -129,7 +127,7 @@ describe("computeSavings", () => {
         anchor: { amountCents: 100_000n, asOf: new Date(2026, 2, 12, 12, 0) }, // 2026-03-12 12:00
         incomeEntries: [],
         month: m(2026, 3),
-        committedThisMonthCents: 0n,
+        pendingThisMonthCents: 0n,
         savingsCuotas: [
           { paidAt: new Date(2026, 2, 12, 11, 50), amountCents: 20_000n }, // antes de reanclar
           { paidAt: new Date(2026, 2, 12, 12, 10), amountCents: 5_000n }, //  después de reanclar
@@ -148,7 +146,7 @@ describe("computeSavings", () => {
       nonCreditExpenses: [{ purchaseDate: m(2026, 2, 10), amountCents: 30_000n }],
       savingsCuotas: [],
       month: m(2026, 2),
-      committedThisMonthCents: 0n,
+      pendingThisMonthCents: 0n,
     });
     // Ene: +50.000 ; Feb: +50.000 −30.000 = 70.000
     expect(r.currentRealCents).toBe(70_000n);
@@ -172,7 +170,7 @@ describe("computeSavings", () => {
       nonCreditExpenses: [],
       savingsCuotas: [],
       month: m(2026, 5),
-      committedThisMonthCents: 0n,
+      pendingThisMonthCents: 0n,
     });
     // Ene–Mar: 30.000×3 = 90.000 ; Abr–May: 60.000×2 = 120.000 → 210.000
     expect(r.currentRealCents).toBe(210_000n);
@@ -204,14 +202,36 @@ describe("computeSavings", () => {
       base({
         nonCreditExpenses: [{ purchaseDate: m(2026, 3, 5), amountCents: 10_000n }],
         savingsCuotas: [{ paidAt: m(2026, 3, 20), amountCents: 25_000n }],
-        committedThisMonthCents: 25_000n,
+        pendingThisMonthCents: 0n, // la única cuota del mes (25.000) ya está paga
       })
     );
     // Real: 100.000 +50.000[feb] +(50.000 −10.000 −25.000)[mar] = 165.000
     expect(r.currentRealCents).toBe(165_000n);
     // Antes: real + cuota del mes (25.000) = 190.000  (el gasto sí está descontado)
     expect(r.beforeCents).toBe(190_000n);
-    // Después: antes − todas las cuotas del mes (25.000) = 165.000
+    // Después: real − lo que falta pagar (0) = 165.000 (la cuota paga NO se resta de nuevo)
     expect(r.afterCents).toBe(165_000n);
+  });
+
+  it("con TODO pago, 'tras cuotas' == 'disponible' aun con cuotas pre-ancla (regresión)", () => {
+    // Bug real: pagás cuotas desde ahorros ANTES de la fecha del ancla y después declarás el saldo
+    // ya rebajado. Esas cuotas (pre-ancla) ya están en el saldo declarado; el "tras cuotas" no debe
+    // volver a restarlas. Con todo pago (pending = 0), after tiene que igualar a currentReal.
+    const r = computeSavings(
+      base({
+        anchor: { amountCents: 100_000n, asOf: m(2026, 3, 15) },
+        incomeEntries: [],
+        savingsCuotas: [
+          { paidAt: m(2026, 3, 10), amountCents: 30_000n }, // pre-ancla: ya en el saldo declarado
+          { paidAt: m(2026, 3, 20), amountCents: 12_000n }, // post-ancla: baja el saldo real
+        ],
+        pendingThisMonthCents: 0n, // no queda nada por pagar del mes
+      })
+    );
+    // Disponible real: 100.000 − 12.000 (la pre-ancla NO se resta, ya está en el ancla) = 88.000
+    expect(r.currentRealCents).toBe(88_000n);
+    // Tras cuotas == disponible: no hay pendientes y no se re-descuenta lo ya pagado.
+    expect(r.afterCents).toBe(88_000n);
+    expect(r.afterCents).toBe(r.currentRealCents);
   });
 });

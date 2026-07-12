@@ -352,13 +352,25 @@ Configuración, formateada en la TZ del navegador) sea significativa por moneda.
   día no se refleja hasta el próximo reancla (imposible de partir por hora sin timestamp en
   `purchaseDate`). Cae dentro del ±1-2 días de precisión que la app ya asume.
 
-El dashboard muestra, por moneda:
-- **Ahorro disponible (`before`)**: saldo del mes antes de tocar las cuotas del mes.
-- **Ahorro tras cuotas (`after`)**: proyección que resta **todas** las cuotas de crédito
-  que vencen ese mes (decisión de producto: "si las pagás desde el ahorro, te queda X").
-- **Saldo real (`currentReal`)**: resta solo las cuotas que el usuario ya marcó como
-  pagadas-desde-ahorros (puente cuota↔ahorro: `Installment.paidFromSavings`, default
-  `true` al marcar pagada).
+El motor devuelve tres valores, por moneda:
+- **`before`**: saldo del mes antes de tocar **ninguna** cuota del mes. No es una card:
+  alimenta el gráfico de proyección del ahorro disponible.
+- **`currentReal` — card "Ahorro disponible"**: saldo **real a hoy**. Resta las
+  cuotas/suscripciones del mes ya marcadas pagadas-desde-ahorros (puente cuota↔ahorro:
+  `Installment.paidFromSavings`, default `true` al marcar pagada).
+- **`after` — card "Ahorro tras cuotas"**: `currentReal − lo que FALTA pagar del mes`
+  (cuotas/suscripciones **PENDING**, `pendingThisMonthCents`). "Si pagás lo que resta desde
+  el ahorro, te queda X".
+
+**Por qué `after` parte de `currentReal` y no de `before`.** La definición ingenua
+("`before` − TODAS las cuotas del mes") **doble-contaba**: una cuota pagada-desde-ahorros
+**antes** de la fecha del ancla ya está reflejada en el saldo declarado (por ende en
+`before`/`currentReal`), pero el término "todas las cuotas del mes" (un `groupBy` por
+`dueDate`, sin noción del ancla) la volvía a restar → `after` quedaba más bajo que
+`currentReal` aun con **todo pagado**. Restando en cambio solo lo **pendiente** (`status ≠
+PAID`, que no depende del ancla) sobre el saldo real, lo ya pagado nunca se descuenta dos
+veces: con todo pago, `pending = 0 ⇒ after == currentReal`. Toda la lógica del ancla queda
+encapsulada en `currentReal`.
 
 Todo entero (BigInt) y por moneda (ARS/USD nunca se mezclan, RF-9.1). El bucketing por
 mes usa año/mes calendario (TZ-safe, igual que `buildProjection`).
@@ -396,10 +408,10 @@ Decisión de producto: un cobro de suscripción es **una cuota más**. Aunque se
 **en** su fecha (la suscripción sigue activa hasta ahí), no antes ⇒ **no** baja `beforeCents`.
 El marcado de pago/salteo es **manual** (el servicio puede darse de baja o pagarse más tarde;
 no se auto-marca al pasar la fecha). Consecuencia elegante: el motor `computeSavings` **no
-cambia** — `getSavingsOverview` solo lo alimenta con inputs más ricos: los cobros no salteados
-del mes se suman a `committedThisMonthCents`, y los pagados-desde-ahorros a `savingsCuotas`
-(reducen el saldo real del mes y el ahorro disponible de los meses siguientes, igual que una
-cuota pagada).
+cambia** — `getSavingsOverview` solo lo alimenta con inputs más ricos: los cobros **pendientes**
+del mes se suman a `pendingThisMonthCents` (lo que resta el "tras cuotas"), y los
+pagados-desde-ahorros a `savingsCuotas` (reducen el saldo real del mes y el ahorro disponible de
+los meses siguientes, igual que una cuota pagada).
 
 ### Crédito: pesa en utilización y calendario vía cobros virtuales (no se materializa)
 
