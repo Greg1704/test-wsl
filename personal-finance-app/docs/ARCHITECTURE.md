@@ -328,13 +328,29 @@ mes. Lo resuelve `incomeForMonth()`.
 ### Cómo se computa el ahorro (`computeSavings`)
 
 El ahorro **no es una columna mutable**: se computa al leer (como `OVERDUE`) desde un
-**ancla** (`SavingsBalance`: saldo declarado por el usuario a la fecha `asOf`, por
+**ancla** (`SavingsBalance`: saldo declarado por el usuario en el instante `asOf`, por
 moneda, editable en Configuración). Acumulando mes a mes desde el ancla:
 
 ```
 saldo(mes) = ancla + Σ ingreso(m) − Σ gastos no-crédito(m) − Σ cuotas-pagadas-desde-ahorros(m)
              para los meses m entre el ancla y el mes objetivo
 ```
+
+**`asOf` es un instante (timestamp), no una fecha.** Al guardar el ahorro se ancla con
+`new Date()` (hora incluida), no medianoche. Motivo: el corte del roll-forward es "¿esta
+cuota/gasto ocurrió antes o después de que declaré el saldo?" — lo anterior ya está
+reflejado en el número declarado, solo lo posterior se descuenta. Si el ancla fuera
+date-only (medianoche), una cuota pagada **más temprano el mismo día** en que reanclás
+caería del lado "posterior" y se restaría **de nuevo** (doble conteo): declarás tu saldo
+ya rebajado y la card le vuelve a restar la cuota. Con `asOf` a instante, `paidAt < asOf`
+parte bien el mismo día (`Installment.paidAt` es timestamp). Además, **`updateSavingsBalance`
+solo re-ancla las monedas cuyo monto cambió**, para que "última actualización" (mostrada en
+Configuración, formateada en la TZ del navegador) sea significativa por moneda.
+
+- **Limitación residual conocida:** los gastos no-crédito se cortan por `purchaseDate`, que
+  es `@db.Date` (sin hora). Una transferencia/débito hecha **después** de reanclar el mismo
+  día no se refleja hasta el próximo reancla (imposible de partir por hora sin timestamp en
+  `purchaseDate`). Cae dentro del ±1-2 días de precisión que la app ya asume.
 
 El dashboard muestra, por moneda:
 - **Ahorro disponible (`before`)**: saldo del mes antes de tocar las cuotas del mes.

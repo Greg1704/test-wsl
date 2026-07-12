@@ -40,7 +40,7 @@ export default async function ConfiguracionPage() {
     }),
     prisma.savingsBalance.findMany({
       where: { userId: user.id },
-      select: { currency: true, amountCents: true },
+      select: { currency: true, amountCents: true, asOf: true },
     }),
   ]);
 
@@ -54,9 +54,17 @@ export default async function ConfiguracionPage() {
     const row = savingsRows.find((s) => s.currency === currency);
     return row ? centsToCurrency(row.amountCents) : undefined;
   };
+  // Instante de la última declaración por moneda (ISO string: `asOf` es un Date, se
+  // formatea en el navegador con la TZ real del usuario). `null` si nunca se declaró.
+  const savingsUpdatedAt = (currency: string): string | null => {
+    const row = savingsRows.find((s) => s.currency === currency);
+    return row ? row.asOf.toISOString() : null;
+  };
   const savingsInitial = {
     savingsArs: savingsAmount("ARS"),
     savingsUsd: savingsAmount("USD"),
+    updatedArs: savingsUpdatedAt("ARS"),
+    updatedUsd: savingsUpdatedAt("USD"),
   };
 
   return (

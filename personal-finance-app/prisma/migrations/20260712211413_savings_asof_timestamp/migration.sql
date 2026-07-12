@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "SavingsBalance" ALTER COLUMN "asOf" SET DATA TYPE TIMESTAMP(3);

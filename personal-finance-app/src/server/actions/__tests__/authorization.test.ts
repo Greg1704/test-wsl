@@ -73,6 +73,7 @@ import {
   listInstallmentsByMonth,
 } from "@/server/actions/dashboard";
 import { updateMonthlyIncome, updateSavingsBalance } from "@/server/actions/settings";
+import { currencyToCents } from "@/server/lib/money";
 
 const USER_A = "user-aaaaaaaaaaaaaaaaaaaaaa";
 const USER_B = "user-bbbbbbbbbbbbbbbbbbbbbb";
@@ -543,13 +544,40 @@ describe("dashboard y configuración (Fase 3)", () => {
 
   it("updateSavingsBalance escribe el ancla SIEMPRE con el userId de la sesión", async () => {
     asUser(USER);
+    // Sin fila previa ⇒ el monto cuenta como cambio y se re-ancla (upsert).
+    vi.mocked(prisma.savingsBalance.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.savingsBalance.upsert).mockResolvedValue({} as never);
 
     await updateSavingsBalance({ savingsArs: 5000 });
 
+    // El ancla se lee/escribe SIEMPRE scopeada por el userId de sesión (nunca del cliente).
+    expect(vi.mocked(prisma.savingsBalance.findMany)).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: USER } })
+    );
     expect(vi.mocked(prisma.savingsBalance.upsert)).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId_currency: { userId: USER, currency: "ARS" } },
+      })
+    );
+  });
+
+  it("updateSavingsBalance solo re-ancla las monedas cuyo monto cambió", async () => {
+    asUser(USER);
+    // ARS ya vale 5000 (no cambia); USD pasa de 100 a 200 (cambia).
+    vi.mocked(prisma.savingsBalance.findMany).mockResolvedValue([
+      { currency: "ARS", amountCents: currencyToCents(5000) },
+      { currency: "USD", amountCents: currencyToCents(100) },
+    ] as never);
+    vi.mocked(prisma.savingsBalance.upsert).mockResolvedValue({} as never);
+
+    await updateSavingsBalance({ savingsArs: 5000, savingsUsd: 200 });
+
+    // Solo USD se re-ancla: el ARS sin cambios no se toca (conserva su `asOf`).
+    const calls = vi.mocked(prisma.savingsBalance.upsert).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toEqual(
+      expect.objectContaining({
+        where: { userId_currency: { userId: USER, currency: "USD" } },
       })
     );
   });

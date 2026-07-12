@@ -7,7 +7,7 @@ import { prisma } from "@/server/db";
 import { requireUser } from "@/server/auth/session";
 import { incomeSchema, savingsSchema } from "@/lib/validation/settings";
 import { currencyToCents } from "@/server/lib/money";
-import { startOfMonth, startOfToday } from "@/server/lib/dates";
+import { startOfMonth } from "@/server/lib/dates";
 
 /**
  * Inserta o actualiza la entrada de ingreso del MES ACTUAL para una moneda
@@ -60,19 +60,34 @@ export async function updateMonthlyIncome(input: unknown) {
 export async function updateSavingsBalance(input: unknown) {
   const user = await requireUser();
   const data = savingsSchema.parse(input);
-  // El ancla es el saldo declarado HOY (día puntual): los gastos posteriores —aunque
-  // sean del mismo mes— se descuentan; lo previo se asume ya reflejado en el saldo.
-  const asOf = startOfToday();
+  // El ancla es el saldo declarado en ESTE instante (timestamp, no medianoche): así las
+  // cuotas/gastos anteriores al guardado caen del lado "ya reflejado en el saldo" y no se
+  // vuelven a descontar, y solo lo posterior lo hace. Ver docs/ARCHITECTURE.md → Ahorros.
+  const asOf = new Date();
 
-  const upsert = (currency: string, amountCents: bigint) =>
-    prisma.savingsBalance.upsert({
+  // Saldos actuales por moneda: solo re-anclamos (y refrescamos `asOf`) las monedas cuyo
+  // monto CAMBIÓ. Así "última actualización" es significativa por moneda (guardar ARS no
+  // toca la fecha de USD si el USD no cambió).
+  const existing = await prisma.savingsBalance.findMany({
+    where: { userId: user.id },
+    select: { currency: true, amountCents: true },
+  });
+  const currentByCurrency = new Map(existing.map((r) => [r.currency, r.amountCents]));
+
+  const upsertIfChanged = (currency: string, amountCents: bigint) => {
+    if (currentByCurrency.get(currency) === amountCents) return null; // sin cambios: no re-ancla
+    return prisma.savingsBalance.upsert({
       where: { userId_currency: { userId: user.id, currency } },
       create: { userId: user.id, currency, amountCents, asOf },
       update: { amountCents, asOf },
     });
+  };
 
-  if (data.savingsArs != null) await upsert("ARS", currencyToCents(data.savingsArs));
-  if (data.savingsUsd != null) await upsert("USD", currencyToCents(data.savingsUsd));
+  const writes = [
+    data.savingsArs != null ? upsertIfChanged("ARS", currencyToCents(data.savingsArs)) : null,
+    data.savingsUsd != null ? upsertIfChanged("USD", currencyToCents(data.savingsUsd)) : null,
+  ].filter((w) => w !== null);
+  await Promise.all(writes);
 
   revalidatePath("/dashboard");
   revalidatePath("/configuracion");

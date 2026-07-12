@@ -237,8 +237,8 @@ model SavingsBalance {
   id          String   @id @default(cuid())
   userId      String
   currency    String
-  amountCents BigInt // saldo declarado a la fecha `asOf`
-  asOf        DateTime @db.Date // primer día del mes del saldo declarado
+  amountCents BigInt // saldo declarado en el instante `asOf`
+  asOf        DateTime // instante EXACTO en que el usuario declaró el saldo (timestamp, no date)
   updatedAt   DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
