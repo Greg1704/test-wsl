@@ -41,14 +41,14 @@ export type SavingsInput = {
   savingsCuotas: { paidAt: Date; amountCents: bigint }[];
   /** Mes objetivo (cualquier día; se usa su mes calendario). */
   month: Date;
-  /** Total de cuotas/suscripciones que vencen en `month` (para la proyección "después"). */
-  committedThisMonthCents: bigint;
   /**
-   * Comprometido de este mes ya PAGADO sin usar ahorros (cuotas/suscripciones marcadas pagas
-   * con "De ahorros" desmarcado): se suma de vuelta al "tras cuotas", porque ese gasto no sale
-   * del ahorro. Default 0.
+   * Cuotas/suscripciones que vencen en `month` y siguen SIN pagar (PENDING/OVERDUE). Es lo único
+   * que el "tras cuotas" resta sobre el saldo real: lo ya pagado desde ahorros ya bajó
+   * `currentReal`, y lo pagado sin ahorros no sale del ahorro — ninguno se vuelve a restar. Así
+   * se evita el doble conteo de las cuotas pagadas-desde-ahorros previas al ancla, que el saldo
+   * declarado ya refleja. Ver docs/ARCHITECTURE.md → Ahorros.
    */
-  paidNotFromSavingsThisMonthCents?: bigint;
+  pendingThisMonthCents: bigint;
 };
 
 export type SavingsOverview = {
@@ -97,8 +97,7 @@ export function computeSavings(input: SavingsInput): SavingsOverview {
     nonCreditExpenses,
     savingsCuotas,
     month,
-    committedThisMonthCents,
-    paidNotFromSavingsThisMonthCents = 0n,
+    pendingThisMonthCents,
   } = input;
 
   const targetIdx = monthIndex(month);
@@ -173,11 +172,11 @@ export function computeSavings(input: SavingsInput): SavingsOverview {
 
   const beforeCents = baseAmount + incomeContribution - expenseSum - cuotaSumBeforeTarget;
   const currentRealCents = beforeCents - cuotaSumThisMonth;
-  // "Tras cuotas": resta TODO lo comprometido del mes y devuelve lo que ya se pagó SIN ahorros
-  // (ese gasto no sale del ahorro). Lo pagado desde ahorros queda restado (está en committed) y
-  // además ya bajó `currentReal`.
-  const afterCents =
-    beforeCents - committedThisMonthCents + paidNotFromSavingsThisMonthCents;
+  // "Tras cuotas": parte del saldo REAL (que ya descontó lo pagado-desde-ahorros del mes) y le
+  // resta solo lo que FALTA pagar. Lo ya pagado no se vuelve a restar → evita el doble conteo de
+  // las cuotas pagadas-desde-ahorros previas al ancla (que el saldo declarado ya refleja). Con
+  // todo pagado, pending = 0 ⇒ afterCents == currentRealCents.
+  const afterCents = currentRealCents - pendingThisMonthCents;
 
   return { beforeCents, afterCents, currentRealCents };
 }
@@ -192,7 +191,7 @@ export type SavingsProjectionMonth = { month: Date; beforeCents: bigint };
  * no del "después de cuotas"). Pura y testeable.
  */
 export function buildSavingsProjection(
-  input: Omit<SavingsInput, "month" | "committedThisMonthCents">,
+  input: Omit<SavingsInput, "month" | "pendingThisMonthCents">,
   fromMonth: Date,
   months: number
 ): SavingsProjectionMonth[] {
@@ -201,7 +200,7 @@ export function buildSavingsProjection(
     const { beforeCents } = computeSavings({
       ...input,
       month,
-      committedThisMonthCents: 0n,
+      pendingThisMonthCents: 0n,
     });
     return { month, beforeCents };
   });
