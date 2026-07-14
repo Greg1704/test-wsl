@@ -31,6 +31,31 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 2, // 2 horas
     updateAge: 60 * 60, //     1 hora
   },
+  // Rate limiting de los endpoints de auth (fuerza bruta de login + "email bombing"
+  // del reset de contraseña, que puede agotar la cuota de Resend o inundar la casilla
+  // de una víctima). `enabled` queda en su default (ACTIVO SOLO EN PRODUCCIÓN): así no
+  // interfiere con el dev ni con el E2E, que es donde se martillan estos endpoints.
+  //
+  // LIMITACIÓN CONOCIDA (MVP): el store por defecto es EN MEMORIA. En Vercel serverless
+  // las instancias son efímeras y no comparten memoria, así que el conteo no es 100%
+  // confiable entre invocaciones. Mitiga el caso básico; el endurecimiento real es un
+  // store compartido (Upstash/Vercel KV vía `secondaryStorage`), ya documentado en
+  // docs/ARCHITECTURE.md → "Redis para rate limit". Estas reglas suben la vara mientras
+  // tanto, sobre todo en los endpoints sensibles.
+  rateLimit: {
+    window: 60, //  ventana de 60s
+    max: 60, //     tope global por IP/ventana (baseline para todo /api/auth)
+    customRules: {
+      // Login: acotar los intentos por ventana frena el brute-force de contraseñas.
+      "/sign-in/email": { window: 60, max: 8 },
+      // Alta de cuenta: limita el spam de registros.
+      "/sign-up/email": { window: 60, max: 5 },
+      // Pedido de reset (el más abusable): 1 por minuto por IP. Se cubren los dos nombres
+      // de ruta posibles según versión de Better Auth; la que no exista es inofensiva.
+      "/request-password-reset": { window: 60, max: 1 },
+      "/forget-password": { window: 60, max: 1 },
+    },
+  },
   user: {
     additionalFields: {
       defaultCurrency: {
