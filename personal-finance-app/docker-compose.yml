@@ -5,7 +5,7 @@ services:
       POSTGRES_DB: cuotas
       POSTGRES_USER: app
       POSTGRES_PASSWORD: dev
-    ports: ["5432:5432"]
+    ports: ["${DB_PORT:-5432}:5432"]
     volumes: ["postgres_data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d cuotas"]
@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "${APP_PORT:-3000}:3000"
     volumes:
       - .:/app                  # monta el código fuente → hot reload
       - /app/node_modules       # volumen anónimo: preserva los node_modules del contenedor
@@ -26,10 +26,10 @@ services:
     environment:
       DATABASE_URL: "postgresql://app:dev@postgres:5432/cuotas?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
-      BETTER_AUTH_URL: "http://localhost:3000"
+      BETTER_AUTH_URL: "http://localhost:${APP_PORT:-3000}"
       # El E2E navega por el alias del contenedor; hay que declararlo confiable.
       BETTER_AUTH_TRUSTED_ORIGINS: "http://cuotapp:3000"
-      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:${APP_PORT:-3000}"
     depends_on:
       postgres:
         condition: service_healthy
