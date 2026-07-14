@@ -24,6 +24,9 @@ services:
       - /app/node_modules       # volumen anónimo: preserva los node_modules del contenedor
       - /app/.next              # volumen anónimo: preserva el cache de build
     environment:
+      # El contenedor corre en 3000 (su mapeo de puertos y el E2E lo asumen). El
+      # script `dev` usa PORT (default 3005 para el host); acá lo fijamos en 3000.
+      PORT: "3000"
       DATABASE_URL: "postgresql://app:dev@postgres:5432/cuotas?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
       BETTER_AUTH_URL: "http://localhost:${APP_PORT:-3000}"

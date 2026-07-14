@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { startDemoSession } from "@/server/actions/demo";
 import { loginSchema, type LoginValues } from "@/lib/validation/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import {
 export default function LoginPage() {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
+  const [isDemoPending, setIsDemoPending] = useState(false);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -42,6 +44,22 @@ export default function LoginPage() {
       return;
     }
 
+    router.push("/dashboard");
+    router.refresh();
+  }
+
+  // Provisiona un sandbox demo y entra. La sesión queda seteada por la Server Action
+  // (cookie vía nextCookies); acá solo redirigimos. Sembrar todo tarda ~1-2 s, por
+  // eso el botón muestra su propio estado de carga.
+  async function onDemo() {
+    setIsDemoPending(true);
+    try {
+      await startDemoSession();
+    } catch {
+      setIsDemoPending(false);
+      toast.error("No pudimos abrir el demo. Probá de nuevo en un momento.");
+      return;
+    }
     router.push("/dashboard");
     router.refresh();
   }
@@ -92,9 +110,26 @@ export default function LoginPage() {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={isPending} className="w-full">
+        <Button type="submit" disabled={isPending || isDemoPending} className="w-full">
           {isPending ? "Ingresando…" : "Ingresar"}
         </Button>
+
+        <div className="flex items-center gap-3">
+          <span className="bg-border h-px flex-1" />
+          <span className="text-muted-foreground text-xs">o</span>
+          <span className="bg-border h-px flex-1" />
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onDemo}
+          disabled={isPending || isDemoPending}
+          className="w-full"
+        >
+          {isDemoPending ? "Preparando demo…" : "Probar demo (sin registro)"}
+        </Button>
+
         <p className="text-muted-foreground text-center text-sm">
           ¿No tenés cuenta?{" "}
           <Link href="/signup" className="text-foreground underline underline-offset-4">

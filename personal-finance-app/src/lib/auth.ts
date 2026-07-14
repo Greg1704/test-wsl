@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { nextCookies } from "better-auth/next-js";
 import { prisma } from "@/server/db";
 import { createDefaultCategoriesFor } from "@/server/lib/categories";
 import { sendResetPasswordEmail } from "@/server/email/send";
@@ -80,6 +81,11 @@ export const auth = betterAuth({
       },
     },
   },
+  // nextCookies DEBE ir último: intercepta las respuestas de `auth.api.*` llamadas
+  // dentro de una Server Action y escribe las cookies (sesión) vía `cookies()` de
+  // Next. Sin esto, provisionar+loguear el invitado demo desde una Server Action
+  // (ver src/server/actions/demo.ts) crearía el usuario pero NO dejaría la sesión.
+  plugins: [nextCookies()],
 });
 
 export type Session = typeof auth.$Infer.Session;
